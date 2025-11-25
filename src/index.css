@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Body background and text */
+body {
+  @apply bg-lightGray text-darkGray;
+}
+
+/* Links */
+a {
+  @apply text-primary hover:text-secondary;
+  text-decoration: none;
+}
+
+/* Buttons */
+button {
+  @apply bg-primary text-white hover:bg-secondary px-4 py-2 rounded transition-colors duration-200;
+}
+
+/* Inputs */
+input {
+  @apply border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary transition-shadow duration-150;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  @apply text-purpleish font-bold;
+}
+
+/* Optional: Add card-like container styles */
+.card {
+  @apply bg-white shadow-md rounded p-4;
+}
+
+/* Optional: Utility for small text links */
+.text-link {
+  @apply text-primary hover:text-secondary text-sm;
+}
+

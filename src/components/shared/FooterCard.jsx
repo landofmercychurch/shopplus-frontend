@@ -28,12 +28,15 @@ export default function FooterCard({ title, links, loading = false }) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 flex-wrap">
+      {/* Title */}
       <h3
-        className="font-bold text-gray-800 mb-2"
+        className="font-bold text-gray-800 mb-2 sm:mb-0 w-full sm:w-auto"
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(title) }}
       />
-      <ul className="flex flex-col gap-1 text-gray-600 text-sm">
+
+      {/* Links */}
+      <ul className="flex flex-col sm:flex-row sm:flex-wrap gap-2 text-gray-600 text-sm w-full sm:w-auto">
         {links.map((link, idx) => {
           const icon = renderIcon(link.label);
 
@@ -60,4 +63,3 @@ export default function FooterCard({ title, links, loading = false }) {
     </div>
   );
 }
-

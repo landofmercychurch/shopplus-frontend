@@ -47,15 +47,18 @@ export default function Footer() {
 
   return (
     <footer className="bg-gray-50 border-t mt-12">
-      {/* Footer Cards */}
-      <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+      {/* ================= Footer Cards ================= */}
+      <div className="max-w-7xl mx-auto px-6 py-10 flex flex-wrap gap-6 justify-between">
         {footerSections.map((section, idx) => (
-          <FooterCard key={idx} title={section.title} links={section.links} loading={loading} />
+          <div key={idx} className="flex-1 min-w-[140px]">
+            <FooterCard title={section.title} links={section.links} loading={loading} />
+          </div>
         ))}
       </div>
 
-      {/* Social & Payment Icons */}
+      {/* ================= Social & Payment Icons ================= */}
       <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-6">
+        {/* Social icons */}
         <div className="flex gap-4 text-gray-500 text-xl">
           <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600">
             <i className="fab fa-facebook-f" />
@@ -68,6 +71,7 @@ export default function Footer() {
           </a>
         </div>
 
+        {/* Payment icons */}
         <div className="flex gap-4 text-gray-400 text-sm">
           <span>Visa</span>
           <span>MasterCard</span>
@@ -75,11 +79,10 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Copyright */}
+      {/* ================= Copyright ================= */}
       <div className="mt-6 text-center text-gray-500 text-sm pb-6">
         &copy; {new Date().getFullYear()} ShopPlus. All rights reserved.
       </div>
     </footer>
   );
 }
-

@@ -1,54 +1,54 @@
 // src/components/Tracking.jsx
-import React, { useEffect, useState } from 'react';
-import { getValidToken, fetchWithAuth } from '../services/authService';
-import DOMPurify from 'dompurify';
+import React, { useEffect, useState } from "react";
+import { useBuyerAuth } from "../context/BuyerAuthContext";
+import axios from "../utils/axiosPublic";
+import DOMPurify from "dompurify";
 
 // Shimmer skeleton row
-function SkeletonRow({ width = 'full', height = 4 }) {
+function SkeletonRow({ width = "full", height = 4 }) {
   return (
     <div
       className="animate-pulse bg-gray-300 rounded mb-2"
-      style={{ width: width === 'full' ? '100%' : width, height: `${height}rem` }}
+      style={{ width: width === "full" ? "100%" : width, height: `${height}rem` }}
     />
   );
 }
 
 export default function Tracking({ orderId }) {
+  const { user, loading: authLoading, rehydrated } = useBuyerAuth();
   const [updates, setUpdates] = useState([]);
-  const [orderStatus, setOrderStatus] = useState('');
+  const [orderStatus, setOrderStatus] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!user || !orderId || authLoading || !rehydrated) return;
 
     const fetchTracking = async () => {
       setLoading(true);
-      setError('');
+      setError("");
       try {
-        const token = await getValidToken();
-        if (!token) throw new Error('User not authenticated');
+        const res = await axios.get(`/tracking/order/${orderId}`, {
+          withCredentials: true,
+        });
 
-        const data = await fetchWithAuth(`/tracking/order/${orderId}`, token);
+        const data = res.data?.data || {};
         setUpdates(Array.isArray(data.updates) ? data.updates : []);
-        setOrderStatus(data.status || '');
+        setOrderStatus(data.status || "");
       } catch (err) {
-        console.error('❌ Error fetching tracking:', err);
-        setError(err.message || 'Failed to load tracking updates.');
+        console.error("❌ Error fetching tracking:", err);
+        setError(err.response?.data?.error || err.message || "Failed to load tracking updates.");
         setUpdates([]);
-        setOrderStatus('');
+        setOrderStatus("");
       } finally {
         setLoading(false);
       }
     };
 
     fetchTracking();
-  }, [orderId]);
+  }, [user, orderId, authLoading, rehydrated]);
 
-  if (loading) {
-    // Show 3 shimmer rows as placeholder
+  if (authLoading || !rehydrated || loading) {
     return (
       <div className="mt-2 border p-3 rounded bg-gray-50 space-y-2">
         <SkeletonRow width="60%" height={5} />
@@ -72,7 +72,7 @@ export default function Tracking({ orderId }) {
 
   return (
     <div className="mt-2 border p-3 rounded bg-gray-50 space-y-2">
-      {orderStatus === 'cancelled' && (
+      {orderStatus === "cancelled" && (
         <p className="text-red-600 font-semibold mb-2">Order Cancelled</p>
       )}
 
@@ -80,8 +80,14 @@ export default function Tracking({ orderId }) {
         <ul className="space-y-2">
           {updates.map((u) => (
             <li key={u.id} className="border-l-4 border-blue-500 pl-2">
-              <p><strong>Status:</strong> {DOMPurify.sanitize(u.status)}</p>
-              {u.location && <p><strong>Location:</strong> {DOMPurify.sanitize(u.location)}</p>}
+              <p>
+                <strong>Status:</strong> {DOMPurify.sanitize(u.status)}
+              </p>
+              {u.location && (
+                <p>
+                  <strong>Location:</strong> {DOMPurify.sanitize(u.location)}
+                </p>
+              )}
               {u.message && <p>{DOMPurify.sanitize(u.message)}</p>}
               <p className="text-sm text-gray-500">
                 {new Date(u.created_at).toLocaleString()}
@@ -91,7 +97,7 @@ export default function Tracking({ orderId }) {
         </ul>
       ) : (
         <p>
-          No tracking updates yet. Current status:{' '}
+          No tracking updates yet. Current status:{" "}
           <strong>{DOMPurify.sanitize(orderStatus)}</strong>
         </p>
       )}

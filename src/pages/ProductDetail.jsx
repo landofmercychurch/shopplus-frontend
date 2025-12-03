@@ -2,12 +2,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { useAuth } from "../context/AuthContext.jsx";
-import { fetchWithAuth } from "../services/authService.js";
+import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
+import { fetchWithAuth } from "../services/buyerAuthService.js";
 
 export default function ProductDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user } = useBuyerAuth();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);

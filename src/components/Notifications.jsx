@@ -1,13 +1,14 @@
 // src/components/Notifications.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { Bell } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { useSocket } from "../context/SocketContext";
-import { fetchWithAuth } from "../services/authService";
+import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
+import { useBuyerSocket } from "../context/BuyerSocketContext.jsx";
+import { fetchWithAuth } from "../services/buyerAuthService.js";
 
 export default function Notifications() {
-  const { user, rehydrated } = useAuth();
-  const { socket } = useSocket();
+  const { user, rehydrated } = useBuyerAuth();
+  const { socket } = useBuyerSocket();
+
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -17,26 +18,26 @@ export default function Notifications() {
   const LIMIT = 20;
 
   // ----------------------------
-  // Fetch notifications
+  // Fetch notifications initially
   // ----------------------------
   const loadNotifications = async () => {
     if (!user || !rehydrated) return;
     try {
       const data = await fetchWithAuth(`/notifications?page=${PAGE}&limit=${LIMIT}`);
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.notifications?.filter(n => !n.is_read).length || 0);
+      const notifs = data.notifications || [];
+      setNotifications(notifs);
+      setUnreadCount(notifs.filter(n => !n.is_read).length);
     } catch (err) {
       console.error("Fetch notifications error:", err);
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     loadNotifications();
   }, [user, rehydrated]);
 
   // ----------------------------
-  // Real-time notifications
+  // Socket: real-time notifications
   // ----------------------------
   useEffect(() => {
     if (!socket || !user) return;

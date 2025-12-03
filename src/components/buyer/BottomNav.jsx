@@ -1,70 +1,57 @@
 // src/components/common/BottomNav.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Home, ShoppingCart, User, MessageSquare, Package, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import DOMPurify from "dompurify";
 
 import BuyerChat from "../buyer/Chat.jsx";
-import { getUser, fetchWithAuth, getValidToken } from "../../services/authService";
-import { useSocket } from "../../context/SocketContext.jsx";
+import axiosPublic from "../../utils/axiosPublic";
+import { useBuyerSocket } from "../../context/BuyerSocketContext.jsx";
+import { useBuyerAuth } from "../../context/BuyerAuthContext.jsx";
 
 export default function BottomNav({ onCartUpdateRef }) {
   const navigate = useNavigate();
-  const { socket } = useSocket();
+  const { socket } = useBuyerSocket();
+  const { user, rehydrated } = useBuyerAuth();
 
-  const [user, setUser] = useState(getUser());
   const [cartCount, setCartCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
-  const [inboxCount, setInboxCount] = useState(0);
   const [storeChats, setStoreChats] = useState([]);
+  const [inboxCount, setInboxCount] = useState(0);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeStore, setActiveStore] = useState(null);
 
-  const intervalsRef = useRef([]);
-
   // ------------------------------
-  // Initialize user token
+  // Fetch counts (once on mount)
   // ------------------------------
   useEffect(() => {
-    const initUser = async () => {
+    if (!user) return;
+
+    const fetchCart = async () => {
       try {
-        await getValidToken();
-        setUser(getUser());
+        const res = await axiosPublic.get("/cart", { withCredentials: true });
+        const total = (res.data || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+        setCartCount(total);
       } catch {
-        setUser(null);
+        setCartCount(0);
       }
     };
-    initUser();
-  }, []);
 
-  // ------------------------------
-  // Fetch counts
-  // ------------------------------
-  const fetchCartCount = async () => {
-    try {
-      const res = await fetchWithAuth("/cart");
-      setCartCount(Array.isArray(res) ? res.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0);
-    } catch {
-      setCartCount(0);
-    }
-  };
+    const fetchOrders = async () => {
+      try {
+        const res = await axiosPublic.get("/orders/buyer/me", { withCredentials: true });
+        const pending = (res.data.orders || []).filter(o => o.status === "pending").length;
+        setOrderCount(pending);
+      } catch {
+        setOrderCount(0);
+      }
+    };
 
-  const fetchOrderCount = async () => {
-    try {
-      const res = await fetchWithAuth("/orders/buyer/me");
-      setOrderCount(Array.isArray(res) ? res.filter(o => o.status === "pending").length : 0);
-    } catch {
-      setOrderCount(0);
-    }
-  };
-
-  const fetchStoreChats = async () => {
-    if (!user) return;
-    try {
-      const res = await fetchWithAuth("/chats/buyer/inbox");
-      if (Array.isArray(res)) {
-        const sanitized = res.map(chat => ({
+    const fetchInbox = async () => {
+      try {
+        const res = await axiosPublic.get("/chats/buyer/inbox", { withCredentials: true });
+        const sanitized = (res.data || []).map(chat => ({
           store_id: chat.store_id,
           store_name: DOMPurify.sanitize(chat.store_name || ""),
           store_logo: chat.store_logo || "/store-placeholder.png",
@@ -73,58 +60,27 @@ export default function BottomNav({ onCartUpdateRef }) {
           unread_count: chat.unread_count || 0,
         }));
         setStoreChats(sanitized);
-        // Update total inbox count
-        setInboxCount(sanitized.reduce((sum, c) => sum + c.unread_count, 0));
-      } else {
+      } catch {
         setStoreChats([]);
-        setInboxCount(0);
       }
-    } catch {
-      setStoreChats([]);
-      setInboxCount(0);
-    }
-  };
+    };
 
-  // ------------------------------
-  // Poll cart/order counts
-  // ------------------------------
-  useEffect(() => {
-    if (!user || user.role === "seller") return;
+    fetchCart();
+    fetchOrders();
+    fetchInbox();
 
-    fetchCartCount();
-    fetchOrderCount();
-    fetchStoreChats();
-
-    intervalsRef.current = [
-      setInterval(fetchCartCount, 5000),
-      setInterval(fetchOrderCount, 10000),
-      setInterval(fetchStoreChats, 10000),
-    ];
-
-    return () => intervalsRef.current.forEach(clearInterval);
+    if (onCartUpdateRef) onCartUpdateRef.current = fetchCart;
   }, [user]);
 
+  // ------------------------------
+  // Recalculate inbox count
+  // ------------------------------
   useEffect(() => {
-    if (onCartUpdateRef) onCartUpdateRef.current = fetchCartCount;
-  }, [onCartUpdateRef]);
-
-  if (!user || user.role === "seller") return null;
+    setInboxCount(storeChats.reduce((sum, c) => sum + (c.unread_count || 0), 0));
+  }, [storeChats]);
 
   // ------------------------------
-  // Mark messages read
-  // ------------------------------
-  const markRead = async (storeId) => {
-    if (!storeId) return;
-    try {
-      await fetchWithAuth(`/chats/mark-read?buyerId=${user.id}`, "POST", { storeId });
-      fetchStoreChats(); // Refresh store chats
-    } catch (err) {
-      console.error("[BottomNav] Failed to mark messages read:", err);
-    }
-  };
-
-  // ------------------------------
-  // Socket: update storeChats and inboxCount
+  // Socket: real-time message updates
   // ------------------------------
   useEffect(() => {
     if (!socket) return;
@@ -139,7 +95,10 @@ export default function BottomNav({ onCartUpdateRef }) {
           const updated = [...prev];
           updated[index].last_message = chat.message;
           updated[index].last_message_time = chat.created_at;
-          if (activeStore?.store_id !== chat.store_id) updated[index].unread_count += 1;
+          // Only increment unread if not viewing this store
+          if (activeStore?.store_id !== chat.store_id) {
+            updated[index].unread_count += 1;
+          }
           return updated;
         } else {
           return [
@@ -158,15 +117,26 @@ export default function BottomNav({ onCartUpdateRef }) {
     };
 
     socket.on("receive_message", handleReceive);
-
-    return () => {
-      socket.off("receive_message", handleReceive);
-    };
+    return () => socket.off("receive_message", handleReceive);
   }, [socket, activeStore]);
 
   // ------------------------------
-  // Navigation items
+  // Mark messages read
   // ------------------------------
+  const markRead = async (storeId) => {
+    if (!storeId || !user) return;
+    setStoreChats(prev =>
+      prev.map(c => c.store_id === storeId ? { ...c, unread_count: 0 } : c)
+    );
+    try {
+      await axiosPublic.post("/chats/mark-read", { storeId }, { withCredentials: true });
+    } catch (err) {
+      console.error("[BottomNav] Failed to mark messages read:", err);
+    }
+  };
+
+  if (!rehydrated || !user) return null;
+
   const navItems = [
     { to: "/", label: "Home", icon: <Home size={22} /> },
     { label: "Cart", icon: <ShoppingCart size={22} />, badge: cartCount, action: () => navigate("/cart") },
@@ -241,7 +211,7 @@ export default function BottomNav({ onCartUpdateRef }) {
               </button>
             </div>
 
-            {/* Body */}
+            {/* Inbox or Chat */}
             <div className="flex-1 flex flex-col overflow-hidden">
               {!activeStore ? (
                 <div className="flex-1 overflow-y-auto bg-gray-50">

@@ -2,15 +2,16 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useBuyerAuth } from "../../context/BuyerAuthContext.jsx";
 
 import ProductCard from "../../components/ProductCard.jsx";
 import CampaignCard from "../../components/buyer/CampaignCard.jsx";
 import FollowButton from "../../components/buyer/FollowButton.jsx";
 import BuyerChat from "../../components/buyer/Chat.jsx";
+import axiosPublic from "../../utils/axiosPublic";
 
 export default function StorePage() {
-  const { user: authUser, activeStore, setActiveStore } = useAuth();
+  const { user: authUser, activeStore, setActiveStore } = useBuyerAuth();
   const { id } = useParams();
 
   const [store, setStore] = useState(null);
@@ -20,8 +21,6 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("products");
   const [isChatOpen, setIsChatOpen] = useState(false);
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
   // ----------------- Skeleton Loader -----------------
   const Skeleton = () => (
@@ -45,15 +44,16 @@ export default function StorePage() {
   // ----------------- Fetch Store Data -----------------
   const fetchAllData = async () => {
     setLoading(true);
+    console.log("[StorePage] Fetching store data for id:", id);
 
     try {
       // Fetch store info
-      const storeRes = await fetch(`${API_BASE}/buyer/stores/${id}`);
-      if (!storeRes.ok) throw new Error(`Store fetch failed: ${storeRes.status}`);
-      const storeData = await storeRes.json();
+      const storeRes = await axiosPublic.get(`/buyer/stores/${id}`);
+      console.log("[StorePage] Store response:", storeRes.data);
+      const storeData = storeRes.data;
+
       if (!storeData) throw new Error("Store not found");
 
-      // Sanitize store fields
       Object.keys(storeData).forEach((key) => {
         if (typeof storeData[key] === "string") {
           storeData[key] = DOMPurify.sanitize(storeData[key]);
@@ -62,10 +62,11 @@ export default function StorePage() {
       setStore(storeData);
 
       // Fetch products
-      const productsRes = await fetch(`${API_BASE}/buyer/stores/${id}/products`);
-      const productsData = await productsRes.json();
+      const productsRes = await axiosPublic.get(`/buyer/stores/${id}/products`);
+      console.log("[StorePage] Products response:", productsRes.data);
+      const productsData = productsRes.data || [];
       setProducts(
-        (productsData || []).map((p) => ({
+        productsData.map((p) => ({
           ...p,
           name: DOMPurify.sanitize(p.name),
           description: DOMPurify.sanitize(p.description || ""),
@@ -73,10 +74,11 @@ export default function StorePage() {
       );
 
       // Fetch campaigns
-      const campaignsRes = await fetch(`${API_BASE}/campaigns/public/store/${id}`);
-      const campaignsData = await campaignsRes.json();
+      const campaignsRes = await axiosPublic.get(`/campaigns/public/store/${id}`);
+      console.log("[StorePage] Campaigns response:", campaignsRes.data);
+      const campaignsData = campaignsRes.data || [];
       setCampaigns(
-        (campaignsData || []).map((c) => ({
+        campaignsData.map((c) => ({
           ...c,
           title: DOMPurify.sanitize(c.title),
           description: DOMPurify.sanitize(c.description || ""),
@@ -84,17 +86,18 @@ export default function StorePage() {
       );
 
       // Fetch followers count
-      const followersRes = await fetch(`${API_BASE}/followers/${id}/count`);
-      const followersData = await followersRes.json();
-      setFollowersCount(followersData?.followersCount || 0);
+      const followersRes = await axiosPublic.get(`/followers/${id}/count`);
+      console.log("[StorePage] Followers count response:", followersRes.data);
+      setFollowersCount(followersRes.data?.followersCount || 0);
     } catch (err) {
-      console.error("❌ StorePage fetch error:", err);
+      console.error("[StorePage] Fetch error:", err);
       setStore(null);
       setProducts([]);
       setCampaigns([]);
       setFollowersCount(0);
     } finally {
       setLoading(false);
+      console.log("[StorePage] Fetching complete");
     }
   };
 
@@ -107,11 +110,15 @@ export default function StorePage() {
     if (!authUser) return alert("You must be logged in to chat with the seller.");
     if (!store?.user_id) return alert("Cannot chat: seller info missing.");
 
+    console.log("[StorePage] Opening chat with seller:", store.user_id);
     setActiveStore({ id: store.id, sellerId: store.user_id });
     setIsChatOpen(true);
   };
 
-  const closeChat = () => setIsChatOpen(false);
+  const closeChat = () => {
+    console.log("[StorePage] Closing chat");
+    setIsChatOpen(false);
+  };
 
   // ----------------- Render -----------------
   if (loading) return <Skeleton />;
@@ -239,9 +246,7 @@ export default function StorePage() {
 
       {/* CHAT MODAL */}
       {isChatOpen && store && authUser && (
-        <div
-          className="fixed bottom-16 right-0 z-50 w-full md:w-96 max-h-[80vh] flex flex-col bg-white shadow-lg rounded-t-lg border border-gray-200"
-        >
+        <div className="fixed bottom-16 right-0 z-50 w-full md:w-96 max-h-[80vh] flex flex-col bg-white shadow-lg rounded-t-lg border border-gray-200">
           <div className="flex items-center justify-between bg-indigo-500 text-white px-4 py-2 rounded-t-lg">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white">
@@ -253,12 +258,7 @@ export default function StorePage() {
               </div>
               <span className="font-semibold">{store.name}</span>
             </div>
-            <button
-              onClick={closeChat}
-              className="text-white hover:text-gray-200 text-xl font-bold"
-            >
-              ✕
-            </button>
+            <button onClick={closeChat} className="text-white hover:text-gray-200 text-xl font-bold">✕</button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 bg-gray-50">

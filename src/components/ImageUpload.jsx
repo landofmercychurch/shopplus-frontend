@@ -1,14 +1,14 @@
 
 
 import React, { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useSellerAuth } from "../context/SellerAuthContext";
 import DOMPurify from "dompurify";
 
 /**
  * type: "store" | "chat" | "product" | "review"
  */
 export default function ImageUpload({ label, url, onUrlChange, fullWidth, type = "store" }) {
-  const { getValidToken } = useAuth();
+  const { getValidToken } = useSellerAuth();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");

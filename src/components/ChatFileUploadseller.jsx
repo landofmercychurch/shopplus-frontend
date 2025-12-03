@@ -1,21 +1,24 @@
-// src/components/ChatFileUpload.jsx
+// src/components/ChatFileUploadseller.jsx
 import React, { useState, forwardRef, useImperativeHandle } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { useSellerAuth } from "../context/SellerAuthContext.jsx";
 
 const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
+  const { user } = useSellerAuth(); // Access auth context if needed
   const [attachments, setAttachments] = useState([]);
   const [status, setStatus] = useState({});
   const [progress, setProgress] = useState({});
 
   // ---------------- SELECT FILES ----------------
   const handleFiles = (files, type) => {
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
     const newAttachments = Array.from(files).map(file => ({
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       file,
       type,
       previewUrl: URL.createObjectURL(file),
-      url: null,
+      url: null
     }));
 
     setAttachments(prev => [...prev, ...newAttachments]);
@@ -60,14 +63,17 @@ const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
           const formData = new FormData();
           formData.append("files", att.file);
 
+          // ---------------- USE CONTEXT-BASED AXIOS ----------------
           const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/uploads/chat`, {
             method: "POST",
-            credentials: "include", // send cookies
             body: formData,
+            credentials: "include", // rely on HTTP-only cookies from auth context
           });
 
           const data = await res.json();
-          if (!data?.success || !Array.isArray(data.files)) throw new Error("Upload failed");
+          if (!data?.success || !Array.isArray(data.files) || data.files.length === 0) {
+            throw new Error("Upload failed");
+          }
 
           att.url = data.files[0].url;
           att.type = data.files[0].type;
@@ -82,7 +88,7 @@ const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
         } catch (err) {
           setStatus(prev => ({ ...prev, [att.id]: "error" }));
           setProgress(prev => ({ ...prev, [att.id]: 0 }));
-          console.error(`[ChatFileUpload] Upload failed for ${att.file.name}:`, err);
+          console.error(`[ERROR] Upload failed for ${att.file.name}:`, err);
         }
       }
 
@@ -118,7 +124,7 @@ const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
     }
 
     return (
-      <div className="relative w-32" key={att.id}>
+      <div className="relative w-32">
         {preview}
         <div className="absolute bottom-6 left-0 w-full bg-black bg-opacity-50 text-white text-xs text-center">
           {uploadMessage}
@@ -140,7 +146,6 @@ const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Upload Buttons */}
       <div className="flex items-center gap-2">
         <label className="cursor-pointer bg-gray-200 px-3 py-1 rounded flex items-center gap-1">
           🖼️
@@ -156,10 +161,11 @@ const ChatFileUpload = forwardRef(({ onSelectAttachments }, ref) => {
         </label>
       </div>
 
-      {/* Previews */}
       {attachments.length > 0 && (
         <div className="flex gap-2 overflow-x-auto mt-2">
-          {attachments.map(renderPreview)}
+          {attachments.map(att => (
+            <div key={att.id}>{renderPreview(att)}</div>
+          ))}
         </div>
       )}
     </div>

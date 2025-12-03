@@ -1,78 +1,66 @@
 // src/components/shared/Header.jsx
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
-import { fetchWithAuth } from '../../services/authService';
+import { fetchWithAuth } from '../../services/buyerAuthService';
 import { Search, X, Heart, ShoppingCart } from 'lucide-react';
+import { useBuyerAuth } from '../../context/BuyerAuthContext';
 import Notifications from '../Notifications';
-import { useAuth } from '../../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:5000';
 
 export default function Header() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { user, logout, rehydrated } = useBuyerAuth();
 
-  // ===== AUTH CONTEXT =====
-  const { user, logout, rehydrated } = useAuth();
-
-  // ===== SEARCH =====
+  // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
 
-  // ===== COUNTS =====
+  // Counts
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
 
-  const isSellerPage = location.pathname.startsWith('/seller');
-  const isSellerSetupPage = location.pathname === '/seller/setup';
-
-  // ----------------- Wishlist Count -----------------
+  // Fetch wishlist count
   const fetchWishlistCount = async () => {
     if (!user) return;
     try {
       const res = await fetchWithAuth(`/favourites/${user.id}`);
       setWishlistCount(Array.isArray(res) ? res.length : 0);
     } catch (err) {
-      console.error("Wishlist fetch error:", err);
+      console.error('Wishlist fetch error:', err);
     }
   };
 
-  // React to global wishlist updates
   useEffect(() => {
     if (!user) return;
-
     fetchWishlistCount();
-
     const handleUpdate = () => fetchWishlistCount();
     window.addEventListener('wishlist-updated', handleUpdate);
     return () => window.removeEventListener('wishlist-updated', handleUpdate);
   }, [user]);
 
-  // ----------------- Cart Count -----------------
+  // Fetch cart count
   useEffect(() => {
     if (!user) return;
-
     const fetchCart = async () => {
       try {
         const res = await fetchWithAuth('/cart/count');
         setCartCount(res?.count || 0);
       } catch (err) {
-        console.error("Cart fetch error:", err);
+        console.error('Cart fetch error:', err);
       }
     };
-
     fetchCart();
   }, [user]);
 
-  // ----------------- Search Logic -----------------
+  // Search logic
   useEffect(() => {
     if (!searchQuery.trim()) {
       setDropdownVisible(false);
       return;
     }
-
     const delay = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ query: searchQuery.trim(), limit: 5 });
@@ -81,15 +69,12 @@ export default function Header() {
         const results = [...(data.products || []), ...(data.stores || [])];
 
         setSearchResults(
-          results.map(item => ({
-            ...item,
-            name: DOMPurify.sanitize(item.name || ''),
-          }))
+          results.map(item => ({ ...item, name: DOMPurify.sanitize(item.name || '') }))
         );
 
         setDropdownVisible(results.length > 0);
       } catch (err) {
-        console.error("Search error:", err);
+        console.error('Search error:', err);
         setDropdownVisible(false);
       }
     }, 350);
@@ -97,41 +82,39 @@ export default function Header() {
     return () => clearTimeout(delay);
   }, [searchQuery]);
 
-  // ----------------- WAIT FOR CONTEXT REHYDRATION -----------------
-  if (!rehydrated) return null;
-
   return (
-    <header className="bg-white shadow sticky top-0 z-50 p-4 flex flex-col md:flex-row justify-between items-center">
-      {/* BRONZE GRADIENT DEFINITION */}
-      <svg width="0" height="0">
-        <defs>
-          <linearGradient id="bronze-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#b87333" />
-            <stop offset="50%" stopColor="#cd7f32" />
-            <stop offset="100%" stopColor="#8c4a0c" />
-          </linearGradient>
-        </defs>
-      </svg>
+    <header className="sticky top-0 z-50 w-full shadow bg-white">
+      {/* Top Promo Bar */}
+      <div className="bg-indigo-600 text-white px-6 py-1 flex justify-between items-center text-sm font-medium">
+        <span>SAVE MORE ON APP</span>
+        <div className="flex gap-4">
+          <span className="cursor-pointer hover:underline" onClick={() => navigate('/customer-care')}>Customer Care</span>
+          <span className="cursor-pointer hover:underline" onClick={() => navigate('/track-order')}>Track my order</span>
+          {!user && (
+            <Link to="/seller/login" className="hover:underline">
+  Seller Center
+</Link>
+          )}
+        </div>
+      </div>
 
-      {/* LOGO */}
-      <Link
-        to={user?.role === 'seller' ? '/seller/dashboard' : '/'}
-        className="flex items-center gap-2 mb-2 md:mb-0"
-      >
-        <img src="/shopplus_logo.png" alt="ShopPlus Logo" className="h-10" />
-        <span className="text-xl font-bold text-indigo-600">ShopPlus</span>
-      </Link>
+      {/* Main Header */}
+      <div className="px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/shopplus_logo.png" alt="ShopPlus Logo" className="h-10 md:h-12" />
+          <span className="text-2xl font-bold text-indigo-600">ShopPlus</span>
+        </Link>
 
-      {/* SEARCH */}
-      {!isSellerPage || isSellerSetupPage ? (
-        <div className="flex-1 relative w-full md:mx-4">
+        {/* Search */}
+        <div className="flex-1 relative w-full md:mx-6">
           <div className="relative flex items-center">
             <Search className="absolute left-3 text-gray-400 w-5 h-5" />
             <input
               type="text"
               placeholder="Search products, stores, campaigns..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-10 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-green-500"
             />
             {searchQuery && (
@@ -143,9 +126,8 @@ export default function Header() {
               </button>
             )}
           </div>
-
           {dropdownVisible && (
-            <ul className="absolute bg-white shadow-md rounded mt-1 w-full z-50 max-h-60 overflow-y-auto">
+            <ul className="absolute bg-white shadow-lg rounded mt-1 w-full z-50 max-h-60 overflow-y-auto">
               {searchResults.map((item, idx) => (
                 <li
                   key={idx}
@@ -160,79 +142,46 @@ export default function Header() {
             </ul>
           )}
         </div>
-      ) : null}
 
-      {/* ACTION ICONS */}
-      <div className="flex items-center gap-4 mt-2 md:mt-0">
-        {user ? (
-          <>
-            {/* Notifications */}
-            <div className="relative cursor-pointer">
+        {/* Actions */}
+        <div className="flex items-center gap-4">
+          {user && rehydrated ? (
+            <>
               <Notifications />
-            </div>
+              <div className="relative cursor-pointer" onClick={() => navigate('/wishlist')}>
+                <Heart className="w-5 h-5 text-red-500" />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full">{wishlistCount}</span>
+                )}
+              </div>
 
-            {/* Wishlist */}
-            <div className="relative cursor-pointer" onClick={() => navigate('/wishlist')}>
-              <Heart
-                className="w-5 h-5"
-                style={{
-                  fill: 'url(#bronze-gradient)',
-                  stroke: '#b87333',
-                  filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.4))',
-                }}
-              />
-              {wishlistCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full">
-                  {wishlistCount}
-                </span>
-              )}
-            </div>
+              <div className="relative cursor-pointer" onClick={() => navigate('/cart')}>
+                <ShoppingCart className="w-5 h-5 text-green-500" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full">{cartCount}</span>
+                )}
+              </div>
 
-            {/* Cart */}
-            <div className="relative cursor-pointer" onClick={() => navigate('/cart')}>
-              <ShoppingCart
-                className="w-5 h-5"
-                style={{
-                  fill: 'url(#bronze-gradient)',
-                  stroke: '#b87333',
-                  filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.4))',
-                }}
-              />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full">
-                  {cartCount}
-                </span>
-              )}
-            </div>
+              <span className="font-medium">{user.full_name || user.email}</span>
 
-            <span className="font-medium">{user.full_name || user.email}</span>
-
-            {user.role === 'seller' && (
-              <Link
-                to="/seller/dashboard"
-                className="px-3 py-1 rounded text-gray-700 hover:text-indigo-600 font-medium"
+              <button
+                onClick={logout}
+                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
               >
-                Dashboard
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="bg-indigo-500 text-white px-3 py-1 rounded hover:bg-indigo-600">
+                Login
               </Link>
-            )}
-
-            <button
-              onClick={logout}
-              className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-            >
-              Logout
-            </button>
-          </>
-        ) : (
-          <>
-            <Link to="/login" className="bg-indigo-500 text-white px-3 py-1 rounded">
-              Login
-            </Link>
-            <Link to="/signup" className="bg-green-500 text-white px-3 py-1 rounded">
-              Sign Up
-            </Link>
-          </>
-        )}
+              <Link to="/signup" className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
+                Sign Up
+              </Link>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

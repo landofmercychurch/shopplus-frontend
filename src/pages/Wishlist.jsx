@@ -2,11 +2,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { useAuth } from '../context/AuthContext';
-import { fetchWithAuth } from '../services/authService';
+import { useBuyerAuth } from '../context/BuyerAuthContext';
+import { fetchWithAuth } from '../services/buyerAuthService';
 
 export default function Wishlist() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useBuyerAuth();
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState({});

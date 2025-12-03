@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../../context/AuthContext";
+import { useSellerAuth } from "../../context/SellerAuthContext";
 import { campaignService } from "../../services/campaignService";
 import { productService } from "../../services/productService";
 import { CampaignCard } from "../../components/seller/CampaignCard";
@@ -8,7 +8,7 @@ import ImageUpload from "../../components/ImageUpload";
 import DOMPurify from "dompurify";
 
 export const SellerCampaigns = () => {
-  const { user } = useAuth();
+  const { user } = useSellerAuth();
   const navigate = useNavigate();
 
   const [campaigns, setCampaigns] = useState([]);

@@ -1,8 +1,11 @@
 // src/pages/PaymentInstructions.jsx
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { getValidToken, fetchWithAuth } from "../../services/authService";
+import axios from "axios";
+import { useBuyerAuth } from "../../context/BuyerAuthContext.jsx";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 // Simple shimmer skeleton for loading
 function SkeletonRow({ width = "full", height = "4" }) {
@@ -16,45 +19,49 @@ function SkeletonRow({ width = "full", height = "4" }) {
 
 export default function PaymentInstructions() {
   const { orderId } = useParams();
+  const { user } = useBuyerAuth(); // Use authenticated user from context
   const [payment, setPayment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
+  // Fetch payment info
   useEffect(() => {
     const fetchPayment = async () => {
+      if (!user) {
+        setError("You must be logged in to view payment info.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError("");
+
       try {
-        const token = await getValidToken();
-        if (!token) throw new Error("User not authenticated");
+        const res = await axios.get(`${API_BASE}/api/payments/${orderId}`, {
+          withCredentials: true, // ensures HTTP-only cookies are sent
+        });
 
-        const data = await fetchWithAuth(`/payments/${orderId}`, token);
-
-        // Backend should verify order belongs to this user
+        const data = res.data;
         if (!data || !data.method) throw new Error("Payment info not found or invalid");
 
-        // Sanitize any user-supplied strings
-        const sanitizedData = {
+        setPayment({
           ...data,
           method: DOMPurify.sanitize(data.method),
-          transaction_ref: data.transaction_ref ? DOMPurify.sanitize(data.transaction_ref) : "",
-        };
-
-        setPayment(sanitizedData);
+          transaction_ref: data.transaction_ref
+            ? DOMPurify.sanitize(data.transaction_ref)
+            : "",
+        });
       } catch (err) {
-        console.error("❌ Payment fetch error:", err);
-        setError(err.message || "Failed to load payment info.");
+        console.error("❌ Payment fetch error:", err.response?.data || err.message);
+        setError(err.response?.data?.message || err.message || "Failed to load payment info.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchPayment();
-  }, [orderId, navigate]);
+  }, [orderId, user]);
 
   const copyToClipboard = (text) => {
     try {
@@ -141,7 +148,9 @@ export default function PaymentInstructions() {
                     {copied ? "Copied!" : "Copy"}
                   </button>
                 </p>
-                <p className="text-xs text-gray-500">Use the transaction reference above as narration.</p>
+                <p className="text-xs text-gray-500">
+                  Use the transaction reference above as narration.
+                </p>
               </div>
             )}
 

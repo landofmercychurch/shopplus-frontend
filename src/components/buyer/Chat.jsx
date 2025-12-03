@@ -1,194 +1,197 @@
-// src/components/BuyerChat.jsx
 import React, { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
-import { fetchWithAuth } from "../../services/authService.js";
-import { useAuth } from "../../context/AuthContext.jsx";
-import { useSocket } from "../../context/SocketContext.jsx";
+import { v4 as uuidv4 } from "uuid";
+import axiosPublic from "../../utils/axiosPublic";
+import { useBuyerAuth } from "../../context/BuyerAuthContext.jsx";
+import { useBuyerSocket } from "../../context/BuyerSocketContext.jsx";
 import ChatFileUpload from "../../components/ChatFileUpload.jsx";
 
-export default function BuyerChat({ storeId, smallFileIcon = false }) {
-  const { user, getValidToken } = useAuth();
-  const { socket, joinRoom, sendMessage, sendTyping } = useSocket();
+export default function BuyerChat({ storeId, onClose, smallFileIcon = false }) {
+  const { user, rehydrated } = useBuyerAuth();
+  const { socket, joinRoom, sendMessage, sendTyping } = useBuyerSocket();
 
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [typingStatus, setTypingStatus] = useState("");
+  const [loading, setLoading] = useState({ messages: false, sending: false });
+  const [storeInfo, setStoreInfo] = useState(null);
+  const [error, setError] = useState(null);
 
   const fileUploadRef = useRef();
-  const endRef = useRef(null);
   const typingTimeout = useRef(null);
+  const messagesEndRef = useRef(null);
 
-  /* ---------------- FETCH CONVERSATION ---------------- */
+  /* ---------------- FETCH SINGLE CONVERSATION ---------------- */
   const fetchConversation = async () => {
-    if (!storeId || !user) return;
+    if (!storeId || !user || !rehydrated) return;
+
+    setLoading(prev => ({ ...prev, messages: true }));
+    setError(null);
+
     try {
-      const data = await fetchWithAuth(`/chats/conversation/${storeId}?buyerId=${user.id}`);
-      setMessages(Array.isArray(data) ? data : []);
+      // 1️⃣ Load messages for this store
+      const res = await axiosPublic.get(`/chats/conversation/${storeId}`);
+      setMessages(res.data.conversation || []);
+
+      // 2️⃣ Join socket room for live updates
       joinRoom({ storeId, buyerId: user.id });
-      markRead(); // mark messages read
+
+      // 3️⃣ Mark messages as read
+      await axiosPublic.post("/chats/mark-read", { storeId });
+      setMessages(prev => prev.map(msg => ({ ...msg, is_read: true })));
+
+      // 4️⃣ Load store info
+      fetchStoreInfo();
     } catch (err) {
-      console.error("[BuyerChat] Fetch conversation error:", err);
-      setMessages([]);
+      setError(err.response?.data?.error || err.message);
+      if (err.response?.status === 404) setMessages([]);
+    } finally {
+      setLoading(prev => ({ ...prev, messages: false }));
+    }
+  };
+
+  const fetchStoreInfo = async () => {
+    try {
+      const res = await axiosPublic.get(`/stores/${storeId}`);
+      setStoreInfo(res.data);
+    } catch (err) {
+      console.error("[BuyerChat] Failed to fetch store info:", err);
     }
   };
 
   useEffect(() => {
-    fetchConversation();
-  }, [storeId, user]);
+    if (storeId && user && rehydrated) fetchConversation();
+  }, [storeId, user, rehydrated]);
 
   /* ---------------- SOCKET LISTENERS ---------------- */
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !storeId) return;
 
-    const handleReceive = (payload) => {
+    const handleReceiveMessage = (payload) => {
       const chat = payload?.chat ?? payload;
       if (!chat || chat.store_id !== storeId) return;
-
-      setMessages((prev) => [...prev, chat]);
+      setMessages(prev => [...prev, chat]);
     };
 
-    const handleTyping = ({ sender }) => {
-      if (sender === "seller") {
+    const handleTyping = ({ sender, storeId: typingStoreId }) => {
+      if (sender === "seller" && typingStoreId === storeId) {
         setTypingStatus("Seller is typing...");
         clearTimeout(typingTimeout.current);
         typingTimeout.current = setTimeout(() => setTypingStatus(""), 1500);
       }
     };
 
-    socket.on("receive_message", handleReceive);
+    socket.on("receive_message", handleReceiveMessage);
     socket.on("typing", handleTyping);
 
     return () => {
-      socket.off("receive_message", handleReceive);
+      socket.off("receive_message", handleReceiveMessage);
       socket.off("typing", handleTyping);
     };
   }, [socket, storeId]);
 
   /* ---------------- AUTO SCROLL ---------------- */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, typingStatus]);
-
-  /* ---------------- TYPING ---------------- */
-  const handleTypingEvent = () => {
-    sendTyping({ storeId, sender: "buyer" });
-  };
-
-  /* ---------------- MARK READ ---------------- */
-  const markRead = async () => {
-    if (!storeId || !user) return;
-    try {
-      await fetchWithAuth(`/chats/mark-read?buyerId=${user.id}`, "POST", { storeId });
-    } catch (err) {
-      console.error("[BuyerChat] Failed to mark messages read:", err);
-    }
-  };
 
   /* ---------------- SEND MESSAGE ---------------- */
   const handleSend = async () => {
     if (!newMessage.trim() && attachments.length === 0) return;
 
+    setLoading(prev => ({ ...prev, sending: true }));
     let uploadedFiles = [];
-    if (fileUploadRef.current && attachments.length > 0) {
-      uploadedFiles = await fileUploadRef.current.uploadFiles();
-      const failed = uploadedFiles.filter(f => !f.url);
-      if (failed.length > 0) return alert("Some files failed to upload.");
-    }
 
-    const msgsToSend = [];
+    try {
+      if (fileUploadRef.current && attachments.length > 0) {
+        uploadedFiles = await fileUploadRef.current.uploadFiles();
+      }
 
-    uploadedFiles.forEach(file => {
-      msgsToSend.push({
+      const msgsToSend = uploadedFiles.map(file => ({
         sender: "buyer",
+        targetUserId: storeInfo?.user_id,
         message: "",
         message_type: file.type,
         file_url: file.url,
-        file_type: file.type,
-        user_id: user.id,
-        store_id: storeId,
-      });
-    });
+        store_id: storeId
+      }));
 
-    if (newMessage.trim()) {
-      msgsToSend.push({
-        sender: "buyer",
-        message: DOMPurify.sanitize(newMessage),
-        message_type: "text",
-        file_url: null,
-        file_type: null,
-        user_id: user.id,
-        store_id: storeId,
-      });
+      if (newMessage.trim()) {
+        msgsToSend.push({
+          sender: "buyer",
+          targetUserId: storeInfo?.user_id,
+          message: DOMPurify.sanitize(newMessage),
+          message_type: "text",
+          store_id: storeId
+        });
+      }
+
+      // Emit via socket
+      msgsToSend.forEach(msg => sendMessage({ storeId, chat: msg }));
+
+      // Save first message via API
+      if (msgsToSend.length > 0) {
+        await axiosPublic.post("/chats/send", msgsToSend[0]);
+      }
+
+      setMessages(prev => [
+        ...prev,
+        ...msgsToSend.map(msg => ({ ...msg, id: uuidv4(), temp: true, is_read: false, created_at: new Date().toISOString() }))
+      ]);
+
+      setNewMessage("");
+      setAttachments([]);
+    } catch (err) {
+      console.error("[BuyerChat] Failed to send:", err);
+      setError(err.response?.data?.error || "Failed to send message");
+    } finally {
+      setLoading(prev => ({ ...prev, sending: false }));
     }
-
-    msgsToSend.forEach(msg => sendMessage({ storeId, chat: msg }));
-
-    // clear input and previews like WhatsApp
-    setNewMessage("");
-    setAttachments([]);
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  if (!storeId || !user || !rehydrated) return null;
+
   return (
-    <div className="flex flex-col h-full w-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
-        {messages.map((m) => {
-          const isSelf = m.sender === "buyer";
-          return (
-            <div
-              key={m.id || `${m.created_at}-${Math.random()}`}
-              className={`flex ${isSelf ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`rounded-lg p-2 max-w-[75%] shadow ${
-                  isSelf ? "bg-indigo-600 text-white" : "bg-white text-gray-900"
-                }`}
-              >
-                {m.message_type === "text" && <div className="whitespace-pre-wrap">{m.message}</div>}
-
-                {m.file_url && (
-                  <>
-                    {m.message_type === "image" && <img src={m.file_url} className="rounded max-h-52" />}
-                    {m.message_type === "video" && <video src={m.file_url} className="rounded max-h-52" controls />}
-                    {m.message_type !== "image" && m.message_type !== "video" && (
-                      <a href={m.file_url} target="_blank" rel="noreferrer" className="underline text-indigo-700">
-                        {m.file_type || "file"}
-                      </a>
-                    )}
-                  </>
-                )}
-
-                <div className={`text-xs mt-1 ${isSelf ? "text-indigo-100" : "text-gray-500"}`}>
-                  {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {typingStatus && <div className="text-sm text-gray-500 italic">{typingStatus}</div>}
-        <div ref={endRef} />
+    <div className="flex flex-col h-full w-full bg-white rounded-lg shadow-lg border border-gray-200">
+      {/* HEADER */}
+      <div className="flex justify-between items-center p-2 border-b">
+        <h2>{storeInfo?.name || "Chat"}</h2>
+        <button onClick={onClose}>Close</button>
       </div>
 
-      {/* Input & Attachments */}
-      <div className="flex items-center gap-2 p-2 border-t border-gray-200 bg-white">
-        <input
-          type="text"
-          className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+      {/* MESSAGES */}
+      <div className="flex-1 overflow-y-auto p-2">
+        {messages.map(msg => (
+          <div key={msg.id} className={`my-1 ${msg.sender === "buyer" ? "text-right" : "text-left"}`}>
+            <div className="inline-block bg-gray-200 p-2 rounded">
+              {msg.message}
+              {msg.file_url && <a href={msg.file_url} target="_blank">{msg.file_type}</a>}
+            </div>
+          </div>
+        ))}
+        {typingStatus && <div className="text-sm text-gray-500">{typingStatus}</div>}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* INPUT */}
+      <div className="flex p-2 border-t gap-2">
+        <ChatFileUpload ref={fileUploadRef} attachments={attachments} setAttachments={setAttachments} />
+        <textarea
           value={newMessage}
+          onChange={e => setNewMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 border rounded p-1"
           placeholder="Type a message..."
-          onChange={(e) => { setNewMessage(e.target.value); handleTypingEvent(); }}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
         />
-
-        <ChatFileUpload ref={fileUploadRef} onSelectAttachments={setAttachments} />
-
-        <button
-          onClick={handleSend}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-indigo-700"
-        >
-          Send
-        </button>
+        <button onClick={handleSend} disabled={loading.sending}>Send</button>
       </div>
     </div>
   );

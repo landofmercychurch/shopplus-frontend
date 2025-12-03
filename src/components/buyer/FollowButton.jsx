@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { getValidToken } from "../../services/authService";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useBuyerAuth } from "../../context/BuyerAuthContext.jsx";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 export default function FollowButton({ storeId, initialFollowersCount = 0 }) {
-  const { user: authUser } = useAuth();
+  const { user: authUser } = useBuyerAuth();
 
   const [followersCount, setFollowersCount] = useState(initialFollowersCount);
   const [following, setFollowing] = useState(false);
@@ -18,9 +17,8 @@ export default function FollowButton({ storeId, initialFollowersCount = 0 }) {
       if (!authUser) return;
 
       try {
-        const token = await getValidToken();
         const res = await axios.get(`${API_BASE_URL}/followers/${storeId}/count`, {
-          headers: { Authorization: `Bearer ${token}` },
+          withCredentials: true, // send cookies automatically
         });
 
         if (typeof res.data.following === "boolean") setFollowing(res.data.following);
@@ -39,12 +37,11 @@ export default function FollowButton({ storeId, initialFollowersCount = 0 }) {
 
     setLoading(true);
     try {
-      const token = await getValidToken();
       const endpoint = following ? "unfollow" : "follow";
       const res = await axios.post(
         `${API_BASE_URL}/followers/${endpoint}`,
         { storeId },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { withCredentials: true } // send cookies automatically
       );
 
       setFollowing(!following);

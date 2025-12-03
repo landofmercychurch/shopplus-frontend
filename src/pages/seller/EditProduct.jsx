@@ -5,12 +5,12 @@ import DOMPurify from "dompurify";
 import { ProductForm } from "../../components/seller/ProductForm";
 import { productService } from "../../services/productService";
 import { campaignService } from "../../services/campaignService";
-import { useAuth } from "../../context/AuthContext";
+import { useSellerAuth } from "../../context/SellerAuthContext";
 
 export const EditProduct = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const { getValidToken } = useAuth();
+  const { getValidToken } = useSellerAuth();
 
   const [product, setProduct] = useState(null);
   const [campaigns, setCampaigns] = useState([]);

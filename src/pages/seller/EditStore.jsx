@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { useAuth } from "../../context/AuthContext";
-import { fetchWithAuth } from "../../services/authService";
+import { useSellerAuth } from "../../context/SellerAuthContext";
+import { fetchWithAuth } from "../../services/sellerAuthService";
 import ImageUpload from "../../components/ImageUpload";
 
 // ===============================
@@ -19,7 +19,7 @@ const Skeleton = ({ height = 20, width = "100%", className }) => (
 export default function EditStore() {
   const { storeId } = useParams();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout } = useSellerAuth();
 
   const [store, setStore] = useState(null);
   const [loading, setLoading] = useState(true);

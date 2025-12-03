@@ -1,42 +1,42 @@
+// src/components/ProductCard.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart } from 'lucide-react';
-import { fetchWithAuth, getUser } from '../services/authService';
-import { useAuth } from '../context/AuthContext';
+import { fetchWithAuth } from '../services/buyerAuthService.js';
+import { useBuyerAuth } from '../context/BuyerAuthContext.jsx';
 
 export default function ProductCard({ product }) {
-  const { user } = useAuth();
+  const { user } = useBuyerAuth();
   const [loading, setLoading] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
+  // -------------------- Wishlist service --------------------
   const wishlistService = {
-    getAll: async () => {
-      const currentUser = getUser();
+    getAll: async (currentUser) => {
       if (!currentUser?.id) throw new Error('User not logged in');
       if (currentUser.role !== 'buyer') throw new Error('Only buyers can use the wishlist');
       return fetchWithAuth(`/favourites/${currentUser.id}`, 'GET');
     },
-    add: async (productId) => {
-      const currentUser = getUser();
+    add: async (productId, currentUser) => {
       if (!currentUser?.id) throw new Error('User not logged in');
       if (currentUser.role !== 'buyer') throw new Error('Only buyers can use the wishlist');
       return fetchWithAuth('/favourites', 'POST', { buyer_id: currentUser.id, product_id: productId });
     },
-    remove: async (productId) => {
-      const currentUser = getUser();
+    remove: async (productId, currentUser) => {
       if (!currentUser?.id) throw new Error('User not logged in');
       if (currentUser.role !== 'buyer') throw new Error('Only buyers can use the wishlist');
       return fetchWithAuth('/favourites', 'DELETE', { buyer_id: currentUser.id, product_id: productId });
     },
   };
 
+  // -------------------- Load wishlist status --------------------
   useEffect(() => {
     if (!user) return setIsWishlisted(false);
 
     const loadWishlist = async () => {
       try {
-        const wishlist = await wishlistService.getAll();
+        const wishlist = await wishlistService.getAll(user);
         const productIds = wishlist.map((item) => item.product_id || item.id);
         setIsWishlisted(productIds.includes(product.id));
       } catch (err) {
@@ -50,13 +50,17 @@ export default function ProductCard({ product }) {
     return () => window.removeEventListener('wishlist-updated', handleWishlistUpdate);
   }, [product.id, user]);
 
+  // -------------------- Toggle wishlist --------------------
   const toggleWishlist = async () => {
     if (!user) return alert('Please login to use wishlist.');
+
     const prevState = isWishlisted;
-    setIsWishlisted(!prevState); // Optimistic update
+    setIsWishlisted(!prevState); // optimistic update
+
     try {
-      if (prevState) await wishlistService.remove(product.id);
-      else await wishlistService.add(product.id);
+      if (prevState) await wishlistService.remove(product.id, user);
+      else await wishlistService.add(product.id, user);
+
       window.dispatchEvent(new Event('wishlist-updated'));
     } catch (err) {
       console.error('Wishlist error:', err);
@@ -65,9 +69,11 @@ export default function ProductCard({ product }) {
     }
   };
 
+  // -------------------- Buy now --------------------
   const handleBuyNow = async () => {
     if (!user) return alert('Please login or sign up to purchase this product.');
     setLoading(true);
+
     try {
       await fetchWithAuth('/cart', 'POST', { product_id: product.id, quantity: 1 });
       alert(`${product.name} added to cart successfully!`);
@@ -79,6 +85,7 @@ export default function ProductCard({ product }) {
     }
   };
 
+  // -------------------- Helper --------------------
   const formatPrice = (amount) =>
     amount != null
       ? Number(amount).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' })
@@ -86,6 +93,7 @@ export default function ProductCard({ product }) {
 
   const hasDiscount = product.old_price && product.old_price > product.price;
 
+  // -------------------- UI --------------------
   return (
     <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition flex flex-col w-full relative">
       {/* Wishlist Button */}

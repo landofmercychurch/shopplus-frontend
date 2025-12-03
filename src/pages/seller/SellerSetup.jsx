@@ -1,12 +1,11 @@
-// src/pages/seller/SellerSetup.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { fetchWithAuth } from '../../services/authService';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { fetchWithAuth } from '../../services/sellerAuthService';
+import { useSellerAuth } from '../../context/SellerAuthContext.jsx';
 
 export default function SellerSetup() {
-  const { user, rehydrated } = useAuth();
+  const { user, rehydrated } = useSellerAuth();
   const navigate = useNavigate();
 
   const [storeData, setStoreData] = useState({
@@ -21,16 +20,16 @@ export default function SellerSetup() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Validate phone & URL
+  // ---------------- Validation ----------------
   const validatePhone = (p) => /^\d{7,15}$/.test(p.replace(/\D/g, ''));
   const validateUrl = (url) => {
     if (!url) return true;
     try { new URL(url, window.location.origin); return true; } catch { return false; }
   };
 
-  // Initialize seller store
+  // ---------------- Load existing store ----------------
   useEffect(() => {
-    if (!rehydrated) return; // wait until AuthContext is ready
+    if (!rehydrated) return;
 
     if (!user || user.role !== 'seller') {
       navigate('/');
@@ -49,10 +48,9 @@ export default function SellerSetup() {
             phone: resStore.phone || '',
           });
 
-          // If store is already fully setup, redirect to dashboard
+          // Redirect if fully setup
           if (resStore.name && resStore.address && resStore.phone) {
             navigate('/seller/dashboard');
-            return;
           }
         }
       } catch (err) {
@@ -66,6 +64,7 @@ export default function SellerSetup() {
     loadStore();
   }, [user, rehydrated, navigate]);
 
+  // ---------------- Handlers ----------------
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -93,7 +92,6 @@ export default function SellerSetup() {
       setErrorMsg('Store Name, Address, and Phone are required.');
       return;
     }
-
     if (!validatePhone(phone)) { setErrorMsg('Invalid phone number.'); return; }
     if (!validateUrl(logo_url)) { setErrorMsg('Invalid Logo URL.'); return; }
 
@@ -109,7 +107,7 @@ export default function SellerSetup() {
         uploadedLogoUrl = resUpload.url;
       }
 
-      // Check if store exists for update vs create
+      // Determine create or update
       const resStore = await fetchWithAuth(`/seller/stores/user/${user.id}`);
       const method = resStore?.id ? 'PUT' : 'POST';
       const endpoint = resStore?.id ? `/seller/stores/${resStore.id}` : '/seller/stores';

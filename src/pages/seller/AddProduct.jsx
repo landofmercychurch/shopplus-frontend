@@ -4,11 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { productService } from "../../services/productService";
 import { campaignService } from "../../services/campaignService";
 import { Loader2 } from "lucide-react";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useSellerAuth } from "../../context/SellerAuthContext.jsx";
 
 export const AddProduct = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useSellerAuth();
 
   const [form, setForm] = useState({
     name: "",

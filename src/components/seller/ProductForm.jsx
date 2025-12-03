@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import DOMPurify from "dompurify";
-import { useAuth } from "../../context/AuthContext";
+import { useSellerAuth } from "../../context/SellerAuthContext";
 import ImageUpload from "../../components/ImageUpload"; // <-- ensure correct path
 
 export const ProductForm = ({ onSubmit, product = {}, disabled = false }) => {
-  const { user } = useAuth(); // get current user info
+  const { user } = useSellerAuth(); // get current user info
   const [form, setForm] = useState({
     name: product.name || "",
     description: product.description || "",

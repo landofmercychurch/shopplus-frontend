@@ -1,5 +1,5 @@
 // src/services/campaignService.js
-import { fetchWithAuth, getUser } from './authService';
+import { fetchWithAuth, getUser } from './sellerAuthService';
 
 export const campaignService = {
   // -------------------------------

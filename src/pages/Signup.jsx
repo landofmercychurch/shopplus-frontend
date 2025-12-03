@@ -1,27 +1,22 @@
+//buyeronly signup.jsx
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
 
 export default function Signup() {
-  const { login } = useAuth();
+  const { login } = useBuyerAuth();
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("buyer");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const API_BASE =
-    import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-    "http://localhost:5000/api";
-
+  const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000/api";
   const phonePattern = /^\+?\d{7,15}$/;
 
   const handleSignup = async (e) => {
@@ -35,8 +30,6 @@ export default function Signup() {
       const cleanPassword = DOMPurify.sanitize(password);
       const cleanPhone = DOMPurify.sanitize(phone.trim());
       const cleanAddress = DOMPurify.sanitize(address.trim());
-      const cleanStoreName = DOMPurify.sanitize(storeName.trim());
-      const cleanAvatarUrl = DOMPurify.sanitize(avatarUrl.trim());
 
       if (!cleanFullName || !cleanEmail || !cleanPassword || !cleanPhone) {
         setErrorMsg("Full name, email, password, and phone are required.");
@@ -48,12 +41,8 @@ export default function Signup() {
         return;
       }
 
-      if (role === "seller" && !cleanStoreName) {
-        setErrorMsg("Store name is required for sellers.");
-        return;
-      }
-
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      // Buyer-specific endpoint
+      const res = await fetch(`${API_BASE}/auth/buyer/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -61,11 +50,9 @@ export default function Signup() {
           full_name: cleanFullName,
           email: cleanEmail,
           password: cleanPassword,
-          role,
+          role: "buyer",
           phone_number: cleanPhone,
-          address: role === "buyer" ? cleanAddress || null : null,
-          store_name: role === "seller" ? cleanStoreName : null,
-          avatar_url: cleanAvatarUrl || null,
+          address: cleanAddress || null,
         }),
       });
 
@@ -75,12 +62,9 @@ export default function Signup() {
         return;
       }
 
-      // Auto-login after signup
+      // Auto-login after signup using AuthContext login
       const user = await login(cleanEmail, cleanPassword);
-
-      if (user.role === "buyer") navigate("/");
-      else if (user.role === "seller")
-        navigate(user.has_store ? "/seller/dashboard" : "/seller/setup");
+      navigate("/");
 
     } catch (err) {
       console.error("Signup error:", err);
@@ -101,13 +85,7 @@ export default function Signup() {
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
           <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
           <input type="tel" placeholder="Phone Number" value={phone} onChange={e => setPhone(e.target.value)} required className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
-          <select value={role} onChange={e => setRole(e.target.value)} className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500">
-            <option value="buyer">Buyer</option>
-            <option value="seller">Seller</option>
-          </select>
-          {role === "buyer" && <input type="text" placeholder="Address (optional)" value={address} onChange={e => setAddress(e.target.value)} className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />}
-          {role === "seller" && <input type="text" placeholder="Store Name" value={storeName} onChange={e => setStoreName(e.target.value)} required className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />}
-          <input type="text" placeholder="Avatar URL (optional)" value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
+          <input type="text" placeholder="Address (optional)" value={address} onChange={e => setAddress(e.target.value)} className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
           <button type="submit" disabled={loading} className="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600 disabled:opacity-50">
             {loading ? "Signing up..." : "Sign Up"}
           </button>

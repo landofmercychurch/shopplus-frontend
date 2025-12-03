@@ -1,43 +1,50 @@
-import React, { useState, useEffect } from "react";
+// src/pages/Cart.jsx
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchWithAuth } from "../services/authService";
-import { useAuth } from "../context/AuthContext";
+import { useBuyerAuth } from "../context/BuyerAuthContext";
+import { fetchWithAuth } from "../services/buyerAuthService";
 
-export default function Cart() {
-  const { user, loading: authLoading } = useAuth(); // ✅ use context
+export default function Cart({ onCartUpdateRef }) {
+  const { user, loading: authLoading, rehydrated } = useBuyerAuth();
+  const navigate = useNavigate();
+
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingItemId, setUpdatingItemId] = useState(null);
-  const navigate = useNavigate();
 
+  // ----------------------------
+  // Helper
+  // ----------------------------
   const formatPrice = (price) =>
     price != null
       ? price.toLocaleString("en-NG", { style: "currency", currency: "NGN" })
       : "₦0";
 
+  const total = cartItems.reduce(
+    (sum, item) => sum + Number(item.price || 0) * item.quantity,
+    0
+  );
+
+  // ----------------------------
   // Fetch cart
-  const fetchCart = async () => {
+  // ----------------------------
+  const fetchCart = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetchWithAuth("/cart"); // cookies handle auth
-      setCartItems(Array.isArray(res) ? res : []);
+      const res = await fetchWithAuth("/cart");
+      setCartItems(Array.isArray(res.data) ? res.data : []);
+      if (onCartUpdateRef) onCartUpdateRef.current?.(); // update bottom nav
     } catch (err) {
       console.error("❌ Error fetching cart:", err);
       setCartItems([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [onCartUpdateRef]);
 
-  useEffect(() => {
-    if (!user && !authLoading) {
-      navigate("/login"); // redirect if not logged in
-    } else if (user) {
-      fetchCart();
-    }
-  }, [user, authLoading]);
-
+  // ----------------------------
   // Update quantity
+  // ----------------------------
   const updateQuantity = async (id, qty) => {
     if (qty < 1) return;
     setUpdatingItemId(id);
@@ -51,7 +58,9 @@ export default function Cart() {
     }
   };
 
+  // ----------------------------
   // Remove item
+  // ----------------------------
   const removeItem = async (id) => {
     setUpdatingItemId(id);
     try {
@@ -64,16 +73,38 @@ export default function Cart() {
     }
   };
 
-  const total = cartItems.reduce(
-    (sum, item) => sum + Number(item.price || 0) * item.quantity,
-    0
-  );
+  // ----------------------------
+  // Add item (optional)
+  // ----------------------------
+  const addItem = async (product_id, quantity = 1) => {
+    try {
+      await fetchWithAuth("/cart", "POST", { product_id, quantity });
+      await fetchCart();
+    } catch (err) {
+      console.error("❌ Add to cart error:", err);
+    }
+  };
 
-  // ---------- RENDER ----------
-  if (authLoading) return <div className="p-4">Checking authentication...</div>;
-  if (!user) return null; // redirecting already
+  // ----------------------------
+  // On mount, fetch cart
+  // ----------------------------
+  useEffect(() => {
+    if (!user && !authLoading && rehydrated) {
+      navigate("/login");
+    } else if (user) {
+      fetchCart();
+    }
+  }, [user, authLoading, rehydrated, fetchCart, navigate]);
 
-  if (loading) {
+  // ----------------------------
+  // Render
+  // ----------------------------
+  if (authLoading || !rehydrated)
+    return <div className="p-4">Checking authentication...</div>;
+
+  if (!user) return null;
+
+  if (loading)
     return (
       <div className="p-4 space-y-4">
         {[...Array(3)].map((_, i) => (
@@ -90,11 +121,9 @@ export default function Cart() {
         ))}
       </div>
     );
-  }
 
-  if (cartItems.length === 0) {
+  if (!cartItems.length)
     return <div className="p-4 text-center text-gray-600">Your cart is empty.</div>;
-  }
 
   return (
     <div className="p-4 max-w-4xl mx-auto">

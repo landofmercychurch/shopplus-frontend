@@ -1,8 +1,8 @@
 import React, { useRef } from "react";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useSellerAuth } from "../../context/SellerAuthContext.jsx";
 
 export const CampaignCard = ({ campaign, onEdit, onDelete, onUpload }) => {
-  const { user } = useAuth(); // get current user info
+  const { user } = useSellerAuth(); // get current user info
   const fileInputRef = useRef();
 
   if (!campaign) return null;

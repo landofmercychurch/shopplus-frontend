@@ -1,7 +1,7 @@
 // src/components/Reviews.jsx
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
-import { fetchWithAuth } from "../services/authService.js";
+import { useAuth } from "../context/BuyerAuthContext.jsx";
+import { fetchWithAuth } from "../services/buyerAuthService.js";
 import DOMPurify from "dompurify";
 
 export default function Reviews({ productId }) {

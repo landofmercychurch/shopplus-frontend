@@ -20,7 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // keep for local development
+        target: 'https://shopplus-backend.onrender.com', // keep for local development
         changeOrigin: true,
         secure: false,
       },

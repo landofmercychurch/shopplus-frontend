@@ -24,7 +24,6 @@ export default function Home() {
   const categoriesRef = useRef(null);
   const featuredRef = useRef(null);
 
-  // Fetch all public data
   useEffect(() => {
     const fetchAll = async () => {
       try {
@@ -38,7 +37,6 @@ export default function Home() {
     fetchAll();
   }, []);
 
-  // Auto-scroll for horizontal sections
   useEffect(() => {
     if (!loading) startAutoScroll();
   }, [loading]);
@@ -59,7 +57,6 @@ export default function Home() {
     });
   };
 
-  // Fetch functions
   const fetchProducts = async () => {
     try {
       const res = user
@@ -110,13 +107,12 @@ export default function Home() {
     }
   };
 
-  // Shimmer skeletons
   const SkeletonCard = ({ width = 'w-36', height = 'h-44' }) => (
     <div className={`flex-shrink-0 ${width} ${height} bg-gray-200 rounded animate-pulse`}></div>
   );
 
   const SkeletonGrid = ({ count = 4 }) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
       {Array.from({ length: count }).map((_, idx) => (
         <SkeletonCard key={idx} />
       ))}
@@ -125,8 +121,8 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="pt-20 px-4 space-y-8"> {/* padding-top for sticky header */}
-        <SkeletonCard width="w-full" height="h-64" /> {/* Hero */}
+      <div className="pt-20 px-4 space-y-6">
+        <SkeletonCard width="w-full" height="h-64" />
         <SkeletonGrid count={8} />
       </div>
     );
@@ -136,17 +132,17 @@ export default function Home() {
   const [heroCampaign, ...secondaryCampaigns] = allCampaigns;
 
   return (
-    <div className="pt-20 px-4 space-y-8"> {/* padding-top for sticky header */}
-      {/* ===================== Hero Campaign ===================== */}
+    <div className="pt-20 px-4 space-y-6">
+      {/* Hero Campaign */}
       {heroCampaign && (
         <CampaignHeroCard campaigns={allCampaigns.map((c) => ({ ...c, title: DOMPurify.sanitize(c.title) }))} />
       )}
 
-      {/* ===================== Secondary Campaigns ===================== */}
+      {/* Secondary Campaigns - horizontal scroll */}
       {secondaryCampaigns.length > 0 && (
         <section>
-          <h2 className="text-xl md:text-2xl font-bold mb-2">Promotions</h2>
-          <div ref={secondaryRef} className="flex overflow-x-auto space-x-4 py-2 scroll-smooth snap-x snap-mandatory">
+          <h2 className="text-lg sm:text-xl font-bold mb-2">Promotions</h2>
+          <div ref={secondaryRef} className="flex overflow-x-auto space-x-3 py-2 scroll-smooth snap-x snap-mandatory">
             {secondaryCampaigns.map((campaign) => (
               <Link key={campaign.id} to={`/campaign/${campaign.id}`} className="flex-shrink-0 w-44 snap-start">
                 <motion.div whileHover={{ scale: 1.05 }}>
@@ -158,11 +154,11 @@ export default function Home() {
         </section>
       )}
 
-      {/* ===================== Categories ===================== */}
+      {/* Categories - horizontal scroll */}
       {categories.length > 0 && (
         <section>
-          <h2 className="text-xl md:text-2xl font-bold mb-2">Categories</h2>
-          <div ref={categoriesRef} className="flex overflow-x-auto space-x-4 py-2 scroll-smooth snap-x snap-mandatory">
+          <h2 className="text-lg sm:text-xl font-bold mb-2">Categories</h2>
+          <div ref={categoriesRef} className="flex overflow-x-auto space-x-3 py-2 scroll-smooth snap-x snap-mandatory">
             {categories.map((cat) => (
               <CategoryCard key={cat.id} category={{ ...cat, name: DOMPurify.sanitize(cat.name) }} />
             ))}
@@ -170,11 +166,11 @@ export default function Home() {
         </section>
       )}
 
-      {/* ===================== Top Stores ===================== */}
+      {/* Top Stores - responsive grid */}
       {stores.length > 0 && (
         <section>
-          <h2 className="text-xl md:text-2xl font-bold mb-2">Top Stores</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <h2 className="text-lg sm:text-xl font-bold mb-2">Top Stores</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {stores.map((store) => (
               <StoreCard key={store.id} store={{ ...store, name: DOMPurify.sanitize(store.name) }} />
             ))}
@@ -182,11 +178,11 @@ export default function Home() {
         </section>
       )}
 
-      {/* ===================== Featured Products ===================== */}
+      {/* Featured Products - horizontal scroll */}
       {products.length > 0 && (
         <section>
-          <h2 className="text-xl md:text-2xl font-bold mb-2">Featured Products</h2>
-          <div ref={featuredRef} className="flex overflow-x-auto space-x-4 py-2 scroll-smooth snap-x snap-mandatory">
+          <h2 className="text-lg sm:text-xl font-bold mb-2">Featured Products</h2>
+          <div ref={featuredRef} className="flex overflow-x-auto space-x-3 py-2 scroll-smooth snap-x snap-mandatory">
             {products.slice(0, 8).map((product) => (
               <motion.div key={product.id} className="flex-shrink-0 w-36 snap-start" whileHover={{ scale: 1.05 }}>
                 <ProductCard product={{ ...product, name: DOMPurify.sanitize(product.name) }} token={user ? user.token : null} />
@@ -194,10 +190,11 @@ export default function Home() {
             ))}
           </div>
 
-          <h2 className="text-xl md:text-2xl font-bold mt-6 mb-2">All Products</h2>
-          <div className="flex flex-wrap gap-4">
+          {/* All Products - responsive grid */}
+          <h2 className="text-lg sm:text-xl font-bold mt-6 mb-2">All Products</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {products.map((product) => (
-              <motion.div key={product.id} className="w-1/2 sm:w-1/3 md:w-1/4" whileHover={{ scale: 1.05 }}>
+              <motion.div key={product.id} whileHover={{ scale: 1.05 }}>
                 <ProductCard product={{ ...product, name: DOMPurify.sanitize(product.name) }} token={user ? user.token : null} />
               </motion.div>
             ))}
@@ -207,4 +204,3 @@ export default function Home() {
     </div>
   );
 }
-

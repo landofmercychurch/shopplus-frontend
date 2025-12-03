@@ -1,289 +1,297 @@
 // src/pages/BuyerLogin.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
 import DOMPurify from "dompurify";
-import { ArrowLeft, HelpCircle, Bug, X, Trash2, AlertCircle, CheckCircle } from "lucide-react";
+import { ArrowLeft, HelpCircle, Bug, X, Trash2, RefreshCw, Wifi, AlertCircle, Terminal } from "lucide-react";
 
 // ============================================
-// DEBUG CONSOLE SYSTEM - ENHANCED VERSION
+// SIMPLE MOBILE DEBUG SYSTEM (useEffect Level)
 // ============================================
-class DebugConsole {
-  constructor() {
-    this.logs = [];
-    this.maxLogs = 100;
-    this.listeners = [];
-    this.isIntercepted = false;
-    this.panel = null;
-    this.logContainer = null;
-    this.isVisible = false;
-    this.requestTimeouts = new Map(); // Track timeouts for requests
-  }
+const useMobileDebug = () => {
+  const [logs, setLogs] = useState([]);
+  const [isDebugVisible, setIsDebugVisible] = useState(false);
+  const logsRef = useRef([]);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-  init() {
-    if (this.isIntercepted) return;
-    
-    this.interceptConsole();
-    this.createPanel();
-    this.isIntercepted = true;
-    
-    this.log('info', '🔧 Debug Console initialized');
-  }
+  useEffect(() => {
+    if (!isMobile) return;
 
-  interceptConsole() {
-    const methods = ['log', 'error', 'warn', 'info', 'debug'];
-    
-    methods.forEach(method => {
-      const original = console[method];
-      console[method] = (...args) => {
-        this.addLog(method, ...args);
-        original.apply(console, args);
+    // Store original console methods
+    const originalConsole = {
+      log: console.log,
+      error: console.error,
+      warn: console.warn,
+      info: console.info,
+      debug: console.debug
+    };
+
+    // Custom log function
+    const addLog = (type, args) => {
+      const timestamp = new Date().toLocaleTimeString();
+      const message = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+
+      const logEntry = {
+        id: Date.now() + Math.random(),
+        timestamp,
+        type,
+        message,
+        color: getLogColor(type)
       };
+
+      logsRef.current = [logEntry, ...logsRef.current.slice(0, 49)];
+      setLogs(logsRef.current);
+
+      // Call original console
+      originalConsole[type](...args);
+    };
+
+    // Override console methods
+    console.log = (...args) => addLog('log', args);
+    console.error = (...args) => addLog('error', args);
+    console.warn = (...args) => addLog('warn', args);
+    console.info = (...args) => addLog('info', args);
+    console.debug = (...args) => addLog('debug', args);
+
+    // Catch unhandled promise rejections
+    window.addEventListener('unhandledrejection', (event) => {
+      addLog('error', ['Unhandled Promise Rejection:', event.reason]);
     });
 
-    // Also intercept fetch/XHR requests
-    this.interceptFetch();
-  }
+    // Catch global errors
+    window.addEventListener('error', (event) => {
+      addLog('error', [`Global Error: ${event.message}`, `File: ${event.filename}`, `Line: ${event.lineno}`]);
+    });
 
-  interceptFetch() {
-    const originalFetch = window.fetch;
-    window.fetch = (...args) => {
-      const requestId = Date.now();
-      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || 'unknown';
-      
-      this.addLog('info', `📡 Fetch Request [${requestId}]: ${url}`, args[1] || {});
-      
+    // Log initial debug info
+    console.log('📱 Mobile Debug System Activated', {
+      platform: navigator.platform,
+      userAgent: navigator.userAgent.substring(0, 50),
+      isIOS,
+      isMobile,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      url: window.location.href
+    });
+
+    // Test API connection
+    testAPIConnection();
+
+    // Add debug toggle button to DOM
+    const debugBtn = document.createElement('button');
+    debugBtn.innerHTML = '🐛';
+    debugBtn.id = 'mobile-debug-toggle';
+    debugBtn.style.cssText = `
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 50%;
+      border: none;
+      font-size: 24px;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    `;
+    debugBtn.onclick = () => setIsDebugVisible(prev => !prev);
+    document.body.appendChild(debugBtn);
+
+    return () => {
+      // Restore original console
+      console.log = originalConsole.log;
+      console.error = originalConsole.error;
+      console.warn = originalConsole.warn;
+      console.info = originalConsole.info;
+      console.debug = originalConsole.debug;
+
+      // Remove button
+      const btn = document.getElementById('mobile-debug-toggle');
+      if (btn) btn.remove();
+    };
+  }, [isMobile]);
+
+  const testAPIConnection = async () => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+    console.log('🔍 Testing API connection to:', API_BASE);
+
+    try {
+      // Simple fetch test
       const startTime = Date.now();
-      this.requestTimeouts.set(requestId, setTimeout(() => {
-        this.addLog('warn', `⏰ Request [${requestId}] taking too long (>5s): ${url}`);
-      }, 5000));
+      const response = await fetch(`${API_BASE}/api/health` || `${API_BASE}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors'
+      }).catch(err => {
+        console.error('❌ Fetch failed:', err.message);
+        return null;
+      });
 
-      return originalFetch(...args)
-        .then(response => {
-          clearTimeout(this.requestTimeouts.get(requestId));
-          this.requestTimeouts.delete(requestId);
-          const duration = Date.now() - startTime;
-          this.addLog('info', `✅ Request [${requestId}] completed in ${duration}ms`, {
-            status: response.status,
-            ok: response.ok
-          });
-          return response;
-        })
-        .catch(error => {
-          clearTimeout(this.requestTimeouts.get(requestId));
-          this.requestTimeouts.delete(requestId);
-          const duration = Date.now() - startTime;
-          this.addLog('error', `❌ Request [${requestId}] failed after ${duration}ms:`, error);
-          throw error;
+      const duration = Date.now() - startTime;
+
+      if (response) {
+        console.log(`✅ API responded in ${duration}ms`, {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: API_BASE
         });
-    };
-  }
-
-  addLog(level, ...args) {
-    const timestamp = new Date().toLocaleTimeString();
-    const message = args.map(arg => {
-      if (typeof arg === 'object' && arg !== null) {
-        try {
-          return JSON.stringify(arg, null, 2);
-        } catch {
-          return String(arg);
-        }
+      } else {
+        console.error('❌ API is not responding');
       }
-      return String(arg);
-    }).join(' ');
-
-    const logEntry = {
-      id: Date.now() + Math.random(),
-      timestamp,
-      level,
-      message,
-      color: this.getLevelColor(level)
-    };
-
-    this.logs.unshift(logEntry);
-    
-    if (this.logs.length > this.maxLogs) {
-      this.logs.pop();
+    } catch (err) {
+      console.error('❌ API test error:', err);
     }
+  };
 
-    this.updatePanel();
-    this.listeners.forEach(listener => listener(logEntry));
-  }
+  const getLogColor = (type) => {
+    switch (type) {
+      case 'error': return 'bg-red-50 text-red-700 border-l-4 border-red-500';
+      case 'warn': return 'bg-yellow-50 text-yellow-700 border-l-4 border-yellow-500';
+      case 'info': return 'bg-blue-50 text-blue-700 border-l-4 border-blue-500';
+      case 'debug': return 'bg-purple-50 text-purple-700 border-l-4 border-purple-500';
+      default: return 'bg-gray-50 text-gray-700 border-l-4 border-gray-500';
+    }
+  };
 
-  log(level, ...args) {
-    this.addLog(level, ...args);
-  }
+  const clearLogs = () => {
+    logsRef.current = [];
+    setLogs([]);
+    console.log('🧹 Debug logs cleared');
+  };
 
-  error(...args) {
-    this.addLog('error', ...args);
-  }
+  const DebugPanel = () => {
+    if (!isDebugVisible || !isMobile) return null;
 
-  warn(...args) {
-    this.addLog('warn', ...args);
-  }
-
-  info(...args) {
-    this.addLog('info', ...args);
-  }
-
-  debug(...args) {
-    this.addLog('debug', ...args);
-  }
-
-  trackLoginEvent(event, data = {}) {
-    this.addLog('info', `🔑 LOGIN EVENT: ${event}`, data);
-  }
-
-  trackAPIRequest(apiName, requestData = {}) {
-    const requestId = Date.now();
-    this.addLog('info', `📤 API Request [${requestId}]: ${apiName}`, requestData);
-    return requestId;
-  }
-
-  trackAPIResponse(requestId, responseData = {}, success = true) {
-    const status = success ? '✅' : '❌';
-    this.addLog(success ? 'info' : 'error', 
-      `${status} API Response [${requestId}]`, responseData);
-  }
-
-  getLevelColor(level) {
-    const colors = {
-      error: 'text-red-600 bg-red-50',
-      warn: 'text-yellow-600 bg-yellow-50',
-      info: 'text-blue-600 bg-blue-50',
-      log: 'text-gray-800',
-      debug: 'text-purple-600 bg-purple-50'
-    };
-    return colors[level] || 'text-gray-800';
-  }
-
-  createPanel() {
-    if (this.panel) return;
-
-    this.panel = document.createElement('div');
-    this.panel.id = 'debug-console-panel';
-    this.panel.className = 'fixed bottom-4 right-4 w-96 max-w-full max-h-96 bg-white rounded-lg shadow-xl border border-gray-300 z-50 flex flex-col hidden';
-    
-    const header = document.createElement('div');
-    header.className = 'flex justify-between items-center p-3 border-b bg-gray-50 rounded-t-lg';
-    
-    const title = document.createElement('div');
-    title.className = 'flex items-center gap-2 font-semibold text-gray-800';
-    title.innerHTML = '<Bug size={16} /> Debug Console';
-    
-    const controls = document.createElement('div');
-    controls.className = 'flex items-center gap-2';
-    
-    const clearBtn = document.createElement('button');
-    clearBtn.innerHTML = '<Trash2 size={14} />';
-    clearBtn.className = 'p-1 hover:bg-gray-200 rounded';
-    clearBtn.title = 'Clear logs';
-    clearBtn.onclick = () => this.clear();
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '<X size={16} />';
-    closeBtn.className = 'p-1 hover:bg-gray-200 rounded';
-    closeBtn.title = 'Close panel';
-    closeBtn.onclick = () => this.hide();
-    
-    controls.appendChild(clearBtn);
-    controls.appendChild(closeBtn);
-    header.appendChild(title);
-    header.appendChild(controls);
-    
-    this.logContainer = document.createElement('div');
-    this.logContainer.className = 'flex-1 overflow-y-auto p-3 font-mono text-sm space-y-1';
-    this.logContainer.style.maxHeight = '300px';
-    
-    const footer = document.createElement('div');
-    footer.className = 'p-2 border-t text-xs text-gray-500 text-center';
-    footer.id = 'debug-console-stats';
-    
-    this.panel.appendChild(header);
-    this.panel.appendChild(this.logContainer);
-    this.panel.appendChild(footer);
-    
-    document.body.appendChild(this.panel);
-  }
-
-  updatePanel() {
-    if (!this.logContainer) return;
-    
-    this.logContainer.innerHTML = '';
-    
-    this.logs.forEach(log => {
-      const logElement = document.createElement('div');
-      logElement.className = `p-2 rounded mb-1 ${log.color}`;
-      logElement.innerHTML = `
-        <div class="flex items-start gap-2">
-          <div class="flex-1">
-            <div class="flex items-center gap-2">
-              <span class="text-gray-500 text-xs font-medium">[${log.timestamp}]</span>
-              <span class="font-bold ${this.getLevelTextColor(log.level)}">${log.level.toUpperCase()}</span>
+    return (
+      <div className="fixed inset-0 z-[9998] bg-black bg-opacity-50 flex items-end md:items-center md:justify-center">
+        <div className="bg-white w-full md:w-3/4 lg:w-1/2 h-3/4 rounded-t-lg md:rounded-lg shadow-xl flex flex-col">
+          {/* Header */}
+          <div className="flex justify-between items-center p-4 border-b bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-t-lg">
+            <div className="flex items-center gap-3">
+              <Terminal size={24} />
+              <div>
+                <h3 className="font-bold text-lg">Mobile Debug Console</h3>
+                <p className="text-sm opacity-90">{isIOS ? 'iOS' : 'Android'} | {logs.length} logs</p>
+              </div>
             </div>
-            <div class="mt-1 whitespace-pre-wrap break-words">${log.message}</div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearLogs}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full"
+                title="Clear logs"
+              >
+                <Trash2 size={20} />
+              </button>
+              <button
+                onClick={testAPIConnection}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full"
+                title="Test API"
+              >
+                <RefreshCw size={20} />
+              </button>
+              <button
+                onClick={() => setIsDebugVisible(false)}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full"
+              >
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+
+          {/* Logs Container */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {logs.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                <Terminal size={48} className="mx-auto mb-4 opacity-50" />
+                <p>No logs yet. Interact with your app to see logs here.</p>
+                <button
+                  onClick={() => console.log('Test log message')}
+                  className="mt-4 px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg"
+                >
+                  Generate Test Log
+                </button>
+              </div>
+            ) : (
+              logs.map(log => (
+                <div
+                  key={log.id}
+                  className={`p-3 rounded-lg ${log.color} font-mono text-sm`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold">{log.type.toUpperCase()}</span>
+                        <span className="text-xs opacity-75">{log.timestamp}</span>
+                      </div>
+                      <pre className="whitespace-pre-wrap break-words overflow-x-auto">
+                        {log.message}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <div className="border-t p-3 bg-gray-50">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => console.log('Test info log:', new Date().toISOString())}
+                className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium"
+              >
+                Log Info
+              </button>
+              <button
+                onClick={() => console.error('Test error for debugging')}
+                className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium"
+              >
+                Log Error
+              </button>
+              <button
+                onClick={() => {
+                  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+                  console.log('API Base URL:', API_BASE);
+                  console.log('Environment:', import.meta.env.MODE);
+                }}
+                className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium col-span-2"
+              >
+                Show Env Vars
+              </button>
+            </div>
           </div>
         </div>
-      `;
-      this.logContainer.appendChild(logElement);
-    });
-    
-    const stats = document.getElementById('debug-console-stats');
-    if (stats) {
-      const errorCount = this.logs.filter(l => l.level === 'error').length;
-      const warnCount = this.logs.filter(l => l.level === 'warn').length;
-      stats.textContent = `${this.logs.length} logs | ${errorCount} errors | ${warnCount} warnings`;
-    }
-  }
+      </div>
+    );
+  };
 
-  getLevelTextColor(level) {
-    const colors = {
-      error: 'text-red-700',
-      warn: 'text-yellow-700',
-      info: 'text-blue-700',
-      debug: 'text-purple-700'
-    };
-    return colors[level] || 'text-gray-700';
-  }
-
-  toggle() {
-    this.isVisible = !this.isVisible;
-    if (this.panel) {
-      this.panel.classList.toggle('hidden', !this.isVisible);
-    }
-  }
-
-  show() {
-    this.isVisible = true;
-    if (this.panel) {
-      this.panel.classList.remove('hidden');
-    }
-  }
-
-  hide() {
-    this.isVisible = false;
-    if (this.panel) {
-      this.panel.classList.add('hidden');
-    }
-  }
-
-  clear() {
-    this.logs = [];
-    this.updatePanel();
-    this.addLog('info', '🧹 Console cleared');
-  }
-}
-
-// Global instance
-const debugConsole = new DebugConsole();
-
-// Initialize
-if (typeof window !== 'undefined') {
-  window.__debugConsole = debugConsole;
-}
+  return {
+    DebugPanel,
+    isDebugVisible,
+    setIsDebugVisible,
+    logs,
+    clearLogs,
+    testAPIConnection
+  };
+};
 
 // ============================================
-// MAIN COMPONENT WITH ENHANCED DEBUGGING
+// MAIN BUYER LOGIN COMPONENT
 // ============================================
 export default function BuyerLogin() {
   const { login } = useBuyerAuth();
@@ -292,415 +300,307 @@ export default function BuyerLogin() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [loginStatus, setLoginStatus] = useState('idle'); // idle, loading, success, error
+  
+  // Initialize mobile debug
+  const { DebugPanel } = useMobileDebug();
 
-  useEffect(() => {
-    debugConsole.init();
-    debugConsole.trackLoginEvent('Login page loaded');
-    
-    // Check if context is available
-    try {
-      debugConsole.debug('useBuyerAuth context:', { 
-        login: typeof login,
-        contextAvailable: !!login
-      });
-    } catch (err) {
-      debugConsole.error('❌ Context error:', err);
-    }
-
-    // Add debug toggle button
-    const toggleBtn = document.createElement('button');
-    toggleBtn.innerHTML = '🐛';
-    toggleBtn.className = 'fixed bottom-4 left-4 w-10 h-10 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center text-lg z-40 hover:bg-indigo-700 transition-colors';
-    toggleBtn.title = 'Toggle Debug Console';
-    toggleBtn.onclick = () => debugConsole.toggle();
-    toggleBtn.id = 'debug-toggle-btn';
-    
-    if (!document.getElementById('debug-toggle-btn')) {
-      document.body.appendChild(toggleBtn);
-    }
-
-    // Add status indicator
-    const statusIndicator = document.createElement('div');
-    statusIndicator.id = 'login-status-indicator';
-    statusIndicator.className = 'fixed top-4 right-4 z-40';
-    document.body.appendChild(statusIndicator);
-
-    return () => {
-      const btn = document.getElementById('debug-toggle-btn');
-      const indicator = document.getElementById('login-status-indicator');
-      if (btn) btn.remove();
-      if (indicator) indicator.remove();
-    };
-  }, []);
-
-  // Update status indicator
-  useEffect(() => {
-    const indicator = document.getElementById('login-status-indicator');
-    if (!indicator) return;
-
-    const statusConfig = {
-      idle: { text: 'Ready', color: 'bg-gray-500', icon: '⏳' },
-      loading: { text: 'Logging in...', color: 'bg-blue-500', icon: '⏳' },
-      success: { text: 'Logged in!', color: 'bg-green-500', icon: '✅' },
-      error: { text: 'Login failed', color: 'bg-red-500', icon: '❌' }
-    };
-
-    const config = statusConfig[loginStatus] || statusConfig.idle;
-    indicator.innerHTML = `
-      <div class="flex items-center gap-2 px-3 py-2 rounded-lg shadow ${config.color} text-white text-sm font-medium">
-        <span>${config.icon}</span>
-        <span>${config.text}</span>
-      </div>
-    `;
-  }, [loginStatus]);
-
+  // Enhanced login handler with detailed debugging
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg("");
-    setLoginStatus('loading');
     
-    const loginRequestId = debugConsole.trackAPIRequest('Buyer Login', {
+    console.log('🔐 Login attempt started', { 
       email: email.substring(0, 3) + '...',
-      timestamp: new Date().toISOString()
-    });
-
-    debugConsole.info('🔄 Starting login process...');
-    debugConsole.debug('Form data:', {
-      emailLength: email.length,
-      passwordLength: password.length,
-      loading,
-      errorMsg
+      timestamp: new Date().toISOString() 
     });
 
     // Sanitize inputs
     const cleanEmail = DOMPurify.sanitize(email.trim());
     const cleanPassword = DOMPurify.sanitize(password);
 
-    debugConsole.debug('Sanitized:', {
-      cleanEmail: cleanEmail ? `${cleanEmail.substring(0, 3)}...` : 'empty',
-      cleanPasswordLength: cleanPassword ? cleanPassword.length : 0
+    console.debug('Input sanitization:', {
+      originalEmail: email,
+      cleanEmail,
+      passwordLength: password.length,
+      cleanPasswordLength: cleanPassword.length
     });
 
+    // Validation
     if (!cleanEmail || !cleanPassword) {
       const error = "Email and password cannot be empty.";
-      debugConsole.trackAPIResponse(loginRequestId, { error }, false);
-      debugConsole.error('❌ Validation failed:', error);
+      console.error('❌ Validation failed:', error);
       setErrorMsg(error);
-      setLoginStatus('error');
       return;
     }
 
-    // Email validation
+    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       const error = "Please enter a valid email address.";
-      debugConsole.trackAPIResponse(loginRequestId, { error }, false);
-      debugConsole.error('❌ Invalid email format');
+      console.error('❌ Invalid email format:', cleanEmail);
       setErrorMsg(error);
-      setLoginStatus('error');
       return;
     }
 
     setLoading(true);
-    
-    // Set a timeout to detect hanging requests
+    console.log('⏳ Login in progress...');
+
+    // Add timeout detection
     const timeoutId = setTimeout(() => {
       if (loading) {
-        debugConsole.warn('⚠️ Login request taking too long (>10 seconds)');
-        debugConsole.trackAPIResponse(loginRequestId, { 
-          status: 'timeout',
-          message: 'Request timed out after 10 seconds'
-        }, false);
+        console.warn('⚠️ Login taking longer than expected (10s)');
+        console.log('Checking network status...');
         
-        setErrorMsg("Login request is taking too long. Please check your connection.");
-        setLoginStatus('error');
-        setLoading(false);
+        // Test network
+        fetch('https://api.ipify.org?format=json')
+          .then(res => console.log('Network test:', res.ok ? 'Online' : 'Offline'))
+          .catch(err => console.error('Network error:', err));
       }
     }, 10000);
 
     try {
-      debugConsole.info('📤 Calling login function from context...');
-      debugConsole.debug('Context login function:', typeof login);
-      
-      // Log the actual API endpoint being called
-      const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000/api";
-      debugConsole.info('🌐 API Base URL:', API_BASE);
+      console.log('📤 Calling login function...');
+      console.debug('Context login function type:', typeof login);
       
       const startTime = Date.now();
-      debugConsole.info('⏱️ Login request started at:', new Date(startTime).toLocaleTimeString());
+      
+      // IMPORTANT: Wrap login in Promise to catch all errors
+      const loginPromise = Promise.resolve(login(cleanEmail, cleanPassword));
+      const data = await loginPromise;
+      
+      const duration = Date.now() - startTime;
+      
+      console.log(`✅ Login completed in ${duration}ms`);
+      console.debug('Login response:', data);
 
-      // Call the login function
-      const data = await login(cleanEmail, cleanPassword);
-      
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      
-      debugConsole.info(`✅ Login completed in ${duration}ms`);
-      debugConsole.trackAPIResponse(loginRequestId, {
-        success: true,
-        duration: `${duration}ms`,
-        hasData: !!data,
-        dataType: typeof data
-      }, true);
-      
-      debugConsole.debug('Login response data:', data);
-      
-      // Check if login was successful
-      if (data && (data.success || data.token || data.user)) {
-        debugConsole.info('🎉 Login successful! Redirecting...');
-        debugConsole.trackLoginEvent('Login successful', {
-          email: cleanEmail.substring(0, 3) + '...',
-          timestamp: new Date().toISOString()
-        });
-        
-        setLoginStatus('success');
-        
-        // Small delay to show success state
-        setTimeout(() => {
-          navigate("/");
-        }, 500);
-      } else {
-        throw new Error(data?.message || "Login failed: Invalid response");
+      if (!data) {
+        throw new Error('Login returned empty response');
       }
-      
+
+      // Check for error in response
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Success - redirect
+      console.log('🎉 Login successful! Redirecting...');
+      setTimeout(() => {
+        navigate("/");
+      }, 100);
+
     } catch (err) {
       clearTimeout(timeoutId);
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      
-      debugConsole.error(`❌ Login failed after ${duration}ms:`, err);
-      debugConsole.trackAPIResponse(loginRequestId, {
-        error: err.message,
-        type: err.name,
-        duration: `${duration}ms`,
-        stack: err.stack
-      }, false);
-      
-      debugConsole.trackLoginEvent('Login failed', {
-        error: err.message,
-        email: cleanEmail.substring(0, 3) + '...'
+      console.error('❌ Login error details:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack?.split('\n')[0]
       });
-      
+
+      // Enhanced error messages
       let errorMessage = "Login failed. Please try again.";
       
-      // Provide more specific error messages
-      if (err.message.includes('Network Error') || err.message.includes('Failed to fetch')) {
-        errorMessage = "Network error. Please check your internet connection.";
-      } else if (err.message.includes('timeout')) {
-        errorMessage = "Request timed out. Server might be slow or unreachable.";
-      } else if (err.message.includes('Invalid credentials')) {
+      if (err.message.includes('Network') || err.message.includes('fetch')) {
+        errorMessage = "Network error. Check your connection and try again.";
+        console.error('🌐 Network issue detected');
+      } else if (err.message.includes('Invalid credentials') || err.message.includes('password')) {
         errorMessage = "Invalid email or password.";
       } else if (err.message.includes('User not found')) {
         errorMessage = "No account found with this email.";
+      } else if (err.message.includes('timeout')) {
+        errorMessage = "Request timed out. Server might be busy.";
+      } else if (err.message.includes('CORS')) {
+        errorMessage = "CORS error. Contact support.";
+        console.error('⚠️ CORS issue - check backend configuration');
       }
-      
+
       setErrorMsg(errorMessage);
-      setLoginStatus('error');
+      console.log('Error shown to user:', errorMessage);
       
     } finally {
       clearTimeout(timeoutId);
       setLoading(false);
-      debugConsole.info('🏁 Login process completed');
+      console.log('🏁 Login process finished');
     }
   };
 
   const handleSocialLogin = (provider) => {
-    debugConsole.info(`🔗 ${provider} login clicked`);
-    debugConsole.trackLoginEvent('Social login initiated', { provider });
+    console.log(`🔗 ${provider} login clicked`);
     
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000/api";
-    debugConsole.debug('Social login endpoint:', `${API_BASE}/auth/buyer/${provider}`);
+    const url = `${API_BASE}/auth/buyer/${provider}`;
     
-    window.location.href = `${API_BASE}/auth/buyer/${provider}`;
+    console.debug('Social login redirect:', { provider, url });
+    window.location.href = url;
   };
 
-  const testLoginFunction = async () => {
-    debugConsole.info('🧪 Testing login function...');
+  // Test backend connection
+  const testBackend = async () => {
+    console.log('🧪 Testing backend connection...');
     
     try {
-      // Test if login function exists and is callable
-      debugConsole.debug('Testing login function type:', typeof login);
-      
-      if (typeof login !== 'function') {
-        throw new Error('login is not a function');
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const response = await fetch(API_BASE, { 
+        method: 'GET',
+        mode: 'cors'
+      }).catch(err => {
+        console.error('❌ Fetch failed:', err);
+        return null;
+      });
+
+      if (response) {
+        console.log('✅ Backend reached:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: API_BASE
+        });
+      } else {
+        console.error('❌ Backend not reachable');
       }
-      
-      // Try a mock call to see if it throws
-      debugConsole.info('Testing login function signature...');
-      
     } catch (err) {
-      debugConsole.error('❌ Login function test failed:', err);
+      console.error('❌ Test failed:', err);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 p-4">
-      <header className="flex justify-between items-center mb-6 bg-white shadow p-3 rounded">
-        <button 
-          onClick={() => navigate("/")}
-          className="flex items-center gap-1 text-indigo-600 hover:underline"
-        >
-          <ArrowLeft size={18} /> Back
-        </button>
-        
-        <div className="flex items-center gap-2">
+    <>
+      <div className="min-h-screen flex flex-col bg-gray-50 p-4">
+        <header className="flex justify-between items-center mb-6 bg-white shadow p-3 rounded">
           <button 
-            onClick={testLoginFunction}
-            className="flex items-center gap-1 text-gray-700 hover:text-indigo-600 text-sm"
-            title="Test Login Function"
+            onClick={() => navigate("/")}
+            className="flex items-center gap-1 text-indigo-600 hover:underline"
           >
-            <Bug size={16} /> Test
+            <ArrowLeft size={18} /> Back
           </button>
           
-          <Link 
-            to="/help-center"
-            className="flex items-center gap-1 text-gray-700 hover:text-indigo-600"
-          >
-            <HelpCircle size={18} /> Help
-          </Link>
-        </div>
-      </header>
-
-      <div className="max-w-md w-full mx-auto bg-white p-6 rounded shadow">
-        <h2 className="text-2xl font-bold mb-4 text-indigo-600 text-center">Buyer Login</h2>
-
-        {/* Connection Status */}
-        <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {loginStatus === 'loading' && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-              )}
-              {loginStatus === 'error' && <AlertCircle size={16} className="text-red-500" />}
-              {loginStatus === 'success' && <CheckCircle size={16} className="text-green-500" />}
-              <span className="text-sm font-medium">
-                Status: {loginStatus.toUpperCase()}
-              </span>
-            </div>
-            <button 
-              onClick={() => debugConsole.toggle()}
-              className="text-xs text-indigo-600 hover:underline"
+          <div className="flex items-center gap-4">
+            <button
+              onClick={testBackend}
+              className="flex items-center gap-1 text-gray-700 hover:text-indigo-600 text-sm"
+              title="Test Backend"
             >
-              View Debug
+              <Wifi size={16} /> Test API
             </button>
+            
+            <button
+              onClick={() => console.log('🔧 Debug info:', { 
+                email, 
+                loading, 
+                errorMsg,
+                env: import.meta.env.MODE,
+                apiBase: import.meta.env.VITE_API_BASE_URL 
+              })}
+              className="flex items-center gap-1 text-gray-700 hover:text-indigo-600 text-sm"
+            >
+              <Bug size={16} /> Debug
+            </button>
+            
+            <Link 
+              to="/help-center"
+              className="flex items-center gap-1 text-gray-700 hover:text-indigo-600"
+            >
+              <HelpCircle size={18} /> Help
+            </Link>
           </div>
-        </div>
+        </header>
 
-        {errorMsg && (
-          <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={18} className="text-red-500 mt-0.5" />
-              <div>
-                <p className="text-red-700 font-medium">{errorMsg}</p>
-                <button 
-                  onClick={() => {
-                    debugConsole.error('Error details:', errorMsg);
-                    debugConsole.toggle();
-                  }}
-                  className="text-xs text-red-600 hover:underline mt-1"
-                >
-                  View error in debug console
-                </button>
+        <div className="max-w-md w-full mx-auto bg-white p-6 rounded shadow">
+          <h2 className="text-2xl font-bold mb-4 text-indigo-600 text-center">Buyer Login</h2>
+
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-red-700 font-medium">{errorMsg}</p>
+                  <button
+                    onClick={() => console.error('Current error:', errorMsg)}
+                    className="text-xs text-red-600 hover:underline mt-1"
+                  >
+                    Log this error
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                debugConsole.debug('Email updated:', e.target.value.substring(0, 3) + '...');
-              }}
-              required
-              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                debugConsole.debug('Password updated (length):', e.target.value.length);
-              }}
-              required
-              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              disabled={loading}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2.5 rounded font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Logging in...
-              </>
-            ) : (
-              'Login'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-6 border-t">
-          <p className="text-center text-sm text-gray-600 mb-4">
-            Or continue with
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {['google', 'apple', 'facebook'].map((provider) => (
-              <button
-                key={provider}
-                onClick={() => handleSocialLogin(provider)}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  console.debug('Email changed:', e.target.value.substring(0, 3) + '...');
+                }}
+                required
+                className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 disabled={loading}
-                className="border border-gray-300 py-2 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center"
-              >
-                <span className="text-sm font-medium capitalize">{provider}</span>
-              </button>
-            ))}
+              />
+            </div>
+
+            <div>
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  console.debug('Password changed, length:', e.target.value.length);
+                }}
+                required
+                className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-500 text-white py-2 rounded hover:bg-indigo-600 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-6 border-t">
+            <p className="text-center text-gray-600 mb-4">Or continue with</p>
+            <div className="grid grid-cols-3 gap-3">
+              {['google', 'apple', 'facebook'].map(provider => (
+                <button
+                  key={provider}
+                  onClick={() => handleSocialLogin(provider)}
+                  className="border px-3 py-2 rounded hover:bg-gray-50 text-sm capitalize"
+                >
+                  {provider}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Don't have an account?{" "}
+            <Link to="/signup" className="text-indigo-600 font-medium hover:underline">
+              Sign up
+            </Link>
+          </p>
         </div>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link 
-            to="/signup"
-            className="text-indigo-600 font-medium hover:underline"
-          >
-            Sign up here
-          </Link>
-        </p>
+        <div className="mt-8 text-center text-xs text-gray-500">
+          <p>Tap the 🐛 button (bottom-right) to open debug console</p>
+          <p className="mt-1">All errors will appear there</p>
+        </div>
       </div>
 
-      {/* Debug Info Footer */}
-      <div className="mt-8 text-center text-xs text-gray-500">
-        <p>Having issues? Check the debug console (🐛 button) for details</p>
-        <button 
-          onClick={() => debugConsole.show()}
-          className="mt-2 text-indigo-600 hover:underline"
-        >
-          Show Debug Console
-        </button>
-      </div>
-    </div>
+      {/* Mobile Debug Panel */}
+      <DebugPanel />
+    </>
   );
 }
-
-export { debugConsole };

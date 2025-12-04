@@ -169,9 +169,9 @@ export default function BuyerLogin() {
   const fetchCSRFToken = async () => {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-      console.log("🛡️ Fetching CSRF token from:", `${API_BASE}/api/csrf-token`);
+      console.log("🛡️ Fetching CSRF token from:", `${API_BASE}/csrf-token`);
       
-      const response = await fetch(`${API_BASE}/api/csrf-token`, {
+      const response = await fetch(`${API_BASE}/csrf-token`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -213,7 +213,7 @@ export default function BuyerLogin() {
       const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
       console.log("🛡️ Trying backup CSRF endpoint...");
       
-      const response = await fetch(`${API_BASE}/api/auth/buyer/csrf-token`, {
+      const response = await fetch(`${API_BASE}/auth/buyer/csrf-token`, {
         method: "GET",
         credentials: "include"
       });
@@ -269,7 +269,7 @@ export default function BuyerLogin() {
       console.log("🛡️ Using CSRF token:", tokenToUse ? "Yes" : "No");
       
       // Make login request WITH CSRF protection
-      const response = await fetch(`${API_BASE}/api/auth/buyer/login`, {
+      const response = await fetch(`${API_BASE}/auth/buyer/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,7 +355,7 @@ export default function BuyerLogin() {
     try {
       // Test 1: CSRF token endpoint
       console.log("1️⃣ Testing CSRF token endpoint...");
-      const csrfRes = await fetch(`${API_BASE}/api/csrf-token`, {
+      const csrfRes = await fetch(`${API_BASE}/csrf-token`, {
         credentials: 'include'
       });
       console.log("   CSRF Endpoint:", csrfRes.status, csrfRes.ok ? "✅ OK" : "❌ Failed");
@@ -380,7 +380,7 @@ export default function BuyerLogin() {
   // Handle social login
   const handleSocialLogin = (provider) => {
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-    const url = `${API_BASE}/api/auth/buyer/${provider}`;
+    const url = `${API_BASE}/auth/buyer/${provider}`;
     
     console.log(`🔗 ${provider} login redirect:`, { url });
     window.location.href = url;

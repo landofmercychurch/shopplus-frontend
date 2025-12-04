@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
 import DOMPurify from "dompurify";
-import { ArrowLeft, HelpCircle, Bug, X, Trash2, RefreshCw, Wifi, AlertCircle, Terminal, Shield, Cookie } from "lucide-react";
+import { ArrowLeft, HelpCircle, Bug, X, Trash2, RefreshCw, Wifi, AlertCircle, Terminal, Shield, Cookie, Key } from "lucide-react";
 
 // ============================================
 // MOBILE DEBUG HOOK
@@ -40,7 +40,8 @@ const useMobileDebug = () => {
       userAgent: navigator.userAgent.substring(0, 50), 
       screen: `${window.screen.width}x${window.screen.height}`, 
       url: window.location.href,
-      domain: window.location.hostname
+      domain: window.location.hostname,
+      isHTTPS: window.location.protocol === "https:"
     });
 
     // Toggle button
@@ -74,43 +75,6 @@ const useMobileDebug = () => {
     console.log("🧹 Debug logs cleared"); 
   };
 
-  const testAPIConnection = async () => {
-    const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-    console.log("🔍 Testing API connection to:", API_BASE);
-    
-    try {
-      console.log("📝 Current cookies before test:", document.cookie);
-      
-      const startTime = Date.now();
-      
-      // Test OPTIONS preflight with credentials
-      console.log("🛫 Testing CORS preflight with credentials...");
-      const preflight = await fetch(`${API_BASE}/api/auth/buyer/login`, {
-        method: "OPTIONS",
-        mode: "cors",
-        credentials: "include" // Important!
-      }).catch(err => {
-        console.error("❌ CORS preflight failed:", err.message);
-        return null;
-      });
-      
-      if (preflight) {
-        console.log("✅ CORS headers:", {
-          'access-control-allow-origin': preflight.headers.get('access-control-allow-origin'),
-          'access-control-allow-credentials': preflight.headers.get('access-control-allow-credentials'),
-          'access-control-allow-methods': preflight.headers.get('access-control-allow-methods'),
-          'access-control-expose-headers': preflight.headers.get('access-control-expose-headers')
-        });
-      }
-      
-      const duration = Date.now() - startTime;
-      console.log(`⏱️ Test completed in ${duration}ms`);
-      
-    } catch (err) { 
-      console.error("❌ API test error:", err); 
-    }
-  };
-
   const DebugPanel = () => {
     if (!isDebugVisible || !isMobile) return null;
     return (
@@ -126,7 +90,6 @@ const useMobileDebug = () => {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={clearLogs} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full" title="Clear logs"><Trash2 size={20} /></button>
-              <button onClick={testAPIConnection} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full" title="Test API"><RefreshCw size={20} /></button>
               <button onClick={() => setIsDebugVisible(false)} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full"><X size={24} /></button>
             </div>
           </div>
@@ -157,11 +120,11 @@ const useMobileDebug = () => {
     );
   };
 
-  return { DebugPanel, logs, clearLogs, testAPIConnection };
+  return { DebugPanel, logs, clearLogs };
 };
 
 // ============================================
-// BUYER LOGIN COMPONENT - FIXED FOR CROSS-DOMAIN COOKIES
+// BUYER LOGIN COMPONENT - FINAL VERSION
 // ============================================
 export default function BuyerLogin() {
   const { login } = useBuyerAuth();
@@ -170,73 +133,54 @@ export default function BuyerLogin() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [corsStatus, setCorsStatus] = useState("unknown");
+  const [cookieStatus, setCookieStatus] = useState("unknown");
 
   const { DebugPanel } = useMobileDebug();
 
-  // Test CORS and cookies on mount
+  // Test cookie functionality on mount
   useEffect(() => {
-    const testCORSAndCookies = async () => {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-      console.log("🔍 Testing CORS and cookie configuration...");
+    const testCookieSupport = () => {
+      console.log("🔍 Testing browser cookie support...");
       
-      try {
-        // First, clear any existing cookies (clean slate)
-        document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + window.location.hostname + ";";
-        document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + window.location.hostname + ";";
+      // Check if cookies are enabled
+      const cookiesEnabled = navigator.cookieEnabled;
+      console.log("🍪 navigator.cookieEnabled:", cookiesEnabled);
+      
+      // Try to set and read a test cookie
+      document.cookie = "shopplus_test=working; path=/; max-age=60; SameSite=None; Secure";
+      
+      setTimeout(() => {
+        const canReadCookie = document.cookie.includes("shopplus_test");
+        console.log("✅ Can read test cookie?", canReadCookie);
+        console.log("📝 All cookies:", document.cookie);
         
-        console.log("🧹 Cleared existing cookies");
-        console.log("📝 Cookies after clear:", document.cookie);
+        setCookieStatus(canReadCookie ? "enabled" : "disabled");
         
-        // Test if we can set a test cookie
-        document.cookie = "test_cookie=hello; path=/; max-age=60; SameSite=None; Secure";
-        console.log("🍪 Set test cookie, current cookies:", document.cookie);
-        
-        // Test CORS preflight
-        const preflight = await fetch(`${API_BASE}/api/auth/buyer/login`, {
-          method: "OPTIONS",
-          mode: "cors",
-          credentials: "include"
-        });
-        
-        const allowOrigin = preflight.headers.get('access-control-allow-origin');
-        const allowCredentials = preflight.headers.get('access-control-allow-credentials');
-        
-        console.log("🛫 CORS Configuration Test:", {
-          allowOrigin,
-          allowCredentials,
-          frontendOrigin: window.location.origin,
-          match: allowOrigin === window.location.origin || allowOrigin === '*'
-        });
-        
-        if (allowCredentials === "true" && (allowOrigin === window.location.origin || allowOrigin === '*')) {
-          setCorsStatus("configured");
-          console.log("✅ CORS properly configured for cross-domain cookies");
-        } else {
-          setCorsStatus("misconfigured");
-          console.warn("⚠️ CORS misconfigured:", {
-            required: { allowCredentials: "true", allowOrigin: window.location.origin },
-            actual: { allowCredentials, allowOrigin }
-          });
+        if (!canReadCookie) {
+          console.warn("⚠️ Cookie support may be disabled in browser settings");
         }
-      } catch (error) {
-        setCorsStatus("error");
-        console.error("❌ CORS test failed:", error);
-      }
+      }, 100);
     };
     
-    testCORSAndCookies();
+    testCookieSupport();
   }, []);
 
+  // Enhanced login handler with detailed cookie tracking
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     
-    console.log("🔐 Login attempt started", { 
-      email: email.substring(0, 3) + "...", 
-      timestamp: new Date().toISOString(),
-      corsStatus,
+    console.log("=".repeat(50));
+    console.log("🔐 LOGIN ATTEMPT STARTED");
+    console.log("=".repeat(50));
+    
+    console.log("📝 Initial state:", {
+      email: email.substring(0, 3) + "...",
+      passwordLength: password.length,
+      loading,
+      cookieStatus,
       frontendDomain: window.location.hostname,
+      isHTTPS: window.location.protocol === "https:",
       cookiesBefore: document.cookie
     });
 
@@ -258,24 +202,31 @@ export default function BuyerLogin() {
 
     try {
       const startTime = Date.now();
+      const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
       
-      console.log("📤 Attempting login via context...");
-      console.log("🔧 Expected cookie behavior: withCredentials=true");
+      console.log("📤 Calling context login function...");
+      console.log("🔧 Expected cookie behavior:");
+      console.log("   - withCredentials: true");
+      console.log("   - SameSite: none");
+      console.log("   - Secure: true (HTTPS)");
+      console.log("   - Domain: .onrender.com");
+      console.log("🌐 Backend URL:", API_BASE);
       
-      // IMPORTANT: We need to intercept the actual fetch to see what's happening
+      // Intercept fetch to see actual request
       const originalFetch = window.fetch;
-      let loginRequestDetails = null;
+      let interceptedRequest = null;
       
       window.fetch = function(url, options = {}) {
         if (url && url.includes('/auth/buyer/login')) {
-          loginRequestDetails = {
+          interceptedRequest = {
             url,
             method: options.method,
             credentials: options.credentials,
             headers: options.headers,
-            body: options.body
+            mode: options.mode,
+            body: options.body ? JSON.parse(options.body) : null
           };
-          console.log("🌐 Intercepted login request:", loginRequestDetails);
+          console.log("🌐 [INTERCEPTED] Login request:", interceptedRequest);
         }
         return originalFetch(url, options);
       };
@@ -288,30 +239,48 @@ export default function BuyerLogin() {
       
       const duration = Date.now() - startTime;
       
+      console.log(`⏱️ Login completed in ${duration}ms`);
+      console.log("📦 Login response data:", userData);
+      
       // Check cookies after login
       setTimeout(() => {
         console.log("🍪 Cookies after login response:", document.cookie);
-      }, 200);
-      
-      console.log(`✅ Login call completed in ${duration}ms`, { 
-        success: !!userData,
-        user: userData ? { id: userData.id, email: userData.email } : null,
-        requestDetails: loginRequestDetails
-      });
+        
+        const hasAccessToken = document.cookie.includes('accessToken');
+        const hasRefreshToken = document.cookie.includes('refreshToken');
+        
+        console.log("✅ Cookie presence check:", {
+          accessToken: hasAccessToken ? 'PRESENT 🎉' : 'MISSING ❌',
+          refreshToken: hasRefreshToken ? 'PRESENT 🎉' : 'MISSING ❌'
+        });
+        
+        if (!hasAccessToken) {
+          console.warn("⚠️ accessToken cookie not found!");
+          console.warn("Possible issues:");
+          console.warn("1. Backend not setting cookie correctly");
+          console.warn("2. Cookie blocked by browser (check SameSite)");
+          console.warn("3. Domain mismatch (frontend vs backend)");
+        }
+      }, 300);
       
       if (userData) {
-        console.log("🎉 Login successful, redirecting...");
+        console.log("🎉 Login successful! User data:", {
+          id: userData.id,
+          email: userData.email,
+          name: userData.full_name
+        });
         
-        // Give cookies time to be set
+        // Wait a moment for cookies to be processed
         setTimeout(() => {
+          console.log("🔄 Redirecting to homepage...");
           navigate("/");
         }, 500);
       } else {
-        throw new Error("Login returned no user data - cookies may not have been set");
+        throw new Error("Login returned no user data");
       }
 
     } catch (err) {
-      console.error("❌ Login error details:", {
+      console.error("❌ LOGIN ERROR DETAILS:", {
         message: err.message,
         name: err.name,
         responseStatus: err.response?.status,
@@ -321,85 +290,131 @@ export default function BuyerLogin() {
       
       let errorMessage = "Login failed. Please try again.";
       
-      // Check for specific CORS/cookie errors
       if (err.message.includes("Network Error") || err.message.includes("Failed to fetch")) {
-        errorMessage = "Cannot connect to server. This may be a CORS issue.";
-      } else if (err.message.includes("credentials")) {
-        errorMessage = "Cookie authentication failed. Try clearing browser cookies.";
+        errorMessage = "Cannot connect to server. Check your internet connection.";
+      } else if (err.message.includes("credentials") || err.message.includes("cookie")) {
+        errorMessage = "Authentication failed. Try clearing browser cookies.";
       } else if (err.response?.status === 401) {
         errorMessage = "Invalid email or password.";
+      } else if (err.response?.status === 403) {
+        errorMessage = "Account not authorized as buyer.";
       }
       
       setErrorMsg(errorMessage);
       
-      // Additional debug: try a manual fetch to see exact error
+      // Run diagnostic tests
       setTimeout(() => {
-        testManualLogin(cleanEmail, cleanPassword);
+        runLoginDiagnostics(cleanEmail, cleanPassword);
       }, 1000);
     } finally {
       setLoading(false);
+      console.log("=".repeat(50));
+      console.log("🏁 LOGIN PROCESS COMPLETED");
+      console.log("=".repeat(50));
     }
   };
 
-  // Manual fetch test to see exact error
-  const testManualLogin = async (testEmail, testPassword) => {
+  // Diagnostic function to identify exact issue
+  const runLoginDiagnostics = async (testEmail, testPassword) => {
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-    const loginURL = `${API_BASE}/api/auth/buyer/login`;
     
-    console.log("🧪 Performing manual login test...");
+    console.log("🔧 RUNNING LOGIN DIAGNOSTICS");
     
     try {
-      const response = await fetch(loginURL, {
+      // Test 1: Check if backend is reachable
+      console.log("1️⃣ Testing backend connectivity...");
+      const healthCheck = await fetch(API_BASE, {
+        method: "GET",
+        mode: "cors"
+      }).catch(err => {
+        console.error("   ❌ Backend unreachable:", err.message);
+        return null;
+      });
+      
+      if (healthCheck) {
+        console.log(`   ✅ Backend reachable (${healthCheck.status})`);
+      }
+      
+      // Test 2: Check CORS configuration
+      console.log("2️⃣ Testing CORS configuration...");
+      const corsTest = await fetch(`${API_BASE}/api/auth/buyer/login`, {
+        method: "OPTIONS",
+        credentials: "include",
+        mode: "cors"
+      }).catch(err => {
+        console.error("   ❌ CORS preflight failed:", err.message);
+        return null;
+      });
+      
+      if (corsTest) {
+        console.log("   ✅ CORS preflight successful");
+        console.log("   📋 CORS Headers:", {
+          allowOrigin: corsTest.headers.get('access-control-allow-origin'),
+          allowCredentials: corsTest.headers.get('access-control-allow-credentials')
+        });
+      }
+      
+      // Test 3: Direct login attempt with full logging
+      console.log("3️⃣ Testing direct login...");
+      const loginResponse = await fetch(`${API_BASE}/api/auth/buyer/login`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        credentials: "include", // CRITICAL FOR COOKIES
+        credentials: "include",
         mode: "cors",
-        body: JSON.stringify({ 
-          email: testEmail, 
-          password: testPassword 
+        body: JSON.stringify({
+          email: testEmail,
+          password: testPassword
         })
       });
       
-      const data = await response.json().catch(() => ({}));
-      
-      console.log("📡 Manual login test result:", {
-        status: response.status,
-        ok: response.ok,
+      console.log("   📡 Direct login response:", {
+        status: loginResponse.status,
+        statusText: loginResponse.statusText,
+        ok: loginResponse.ok,
         headers: {
-          'set-cookie': response.headers.get('set-cookie'),
-          'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
-          'access-control-allow-credentials': response.headers.get('access-control-allow-credentials')
-        },
-        data
+          'set-cookie': loginResponse.headers.get('set-cookie'),
+          'content-type': loginResponse.headers.get('content-type')
+        }
       });
       
-      if (response.headers.get('set-cookie')) {
-        console.log("✅ Server is trying to set cookies!");
-      } else {
-        console.warn("⚠️ No 'set-cookie' header in response");
-      }
+      const responseData = await loginResponse.json().catch(() => ({}));
+      console.log("   📦 Response data:", responseData);
       
-    } catch (err) {
-      console.error("❌ Manual login test failed:", err);
+    } catch (error) {
+      console.error("❌ Diagnostic failed:", error);
     }
   };
 
-  // Test cookie functionality
-  const testCookieFunctionality = () => {
-    console.log("🍪 Testing cookie functionality...");
+  // Quick cookie test
+  const testCookieFlow = async () => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
     
-    // Try to set a cookie
-    document.cookie = "debug_test_cookie=working; path=/; max-age=60; SameSite=None; Secure";
+    console.log("🧪 Testing cookie flow with backend...");
     
-    console.log("Current cookies:", document.cookie);
-    console.log("Can read debug_test_cookie?", document.cookie.includes("debug_test_cookie"));
-    
-    // Check SameSite setting
-    console.log("Current URL:", window.location.href);
-    console.log("Is HTTPS?", window.location.protocol === "https:");
+    try {
+      // Clear existing cookies
+      document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      
+      // Set a test cookie from frontend
+      document.cookie = "frontend_test_cookie=hello; path=/; max-age=60; SameSite=None; Secure";
+      
+      // Test if backend receives cookies
+      const response = await fetch(`${API_BASE}/api/debug/cookies`, {
+        method: "GET",
+        credentials: "include",
+        mode: "cors"
+      });
+      
+      const data = await response.json();
+      console.log("📡 Backend cookie debug:", data);
+      
+    } catch (error) {
+      console.error("❌ Cookie test failed:", error);
+    }
   };
 
   const handleSocialLogin = (provider) => {
@@ -419,22 +434,22 @@ export default function BuyerLogin() {
           </button>
           
           <div className="flex items-center gap-4">
+            {/* Cookie Status Indicator */}
             <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-              corsStatus === "configured" ? "bg-green-100 text-green-700" :
-              corsStatus === "misconfigured" ? "bg-yellow-100 text-yellow-700" :
-              corsStatus === "error" ? "bg-red-100 text-red-700" :
+              cookieStatus === "enabled" ? "bg-green-100 text-green-700" :
+              cookieStatus === "disabled" ? "bg-red-100 text-red-700" :
               "bg-gray-100 text-gray-700"
             }`}>
-              <Shield size={12} className="inline mr-1" />
-              CORS: {corsStatus}
+              <Cookie size={12} className="inline mr-1" />
+              Cookies: {cookieStatus}
             </div>
             
             <button
-              onClick={testCookieFunctionality}
+              onClick={testCookieFlow}
               className="flex items-center gap-1 text-gray-700 hover:text-indigo-600 text-sm"
-              title="Test Cookies"
+              title="Test Cookie Flow"
             >
-              <Cookie size={16} /> Test Cookies
+              <Key size={16} /> Test Cookies
             </button>
             
             <Link to="/help-center" className="flex items-center gap-1 text-gray-700 hover:text-indigo-600">
@@ -446,21 +461,18 @@ export default function BuyerLogin() {
         <div className="max-w-md w-full mx-auto bg-white p-6 rounded shadow">
           <h2 className="text-2xl font-bold mb-4 text-indigo-600 text-center">Buyer Login</h2>
           
-          {/* Critical Cookie Notice */}
-          {corsStatus === "misconfigured" && (
-            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-              <div className="flex items-start gap-2">
-                <AlertCircle size={18} className="text-yellow-500 mt-0.5" />
-                <div>
-                  <p className="font-medium text-yellow-700">⚠️ CORS Issue Detected</p>
-                  <p className="text-yellow-600 text-xs mt-1">
-                    Cookies may not work between frontend ({window.location.origin}) and backend.
-                    Check backend CORS settings.
-                  </p>
-                </div>
+          {/* Cookie Info Banner */}
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+            <div className="flex items-start gap-2">
+              <Shield size={16} className="text-blue-500 mt-0.5" />
+              <div>
+                <p className="font-medium text-blue-700">HTTP-only Cookies Enabled</p>
+                <p className="text-blue-600 text-xs mt-1">
+                  Using secure, cross-domain cookies with SameSite=None
+                </p>
               </div>
             </div>
-          )}
+          </div>
           
           {errorMsg && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
@@ -469,10 +481,10 @@ export default function BuyerLogin() {
                 <div>
                   <p className="text-red-700 font-medium">{errorMsg}</p>
                   <button
-                    onClick={() => console.error("Login error details:", { errorMsg, corsStatus })}
+                    onClick={() => console.error("Error logged to console")}
                     className="text-xs text-red-600 hover:underline mt-1"
                   >
-                    Log error details
+                    View error details in console
                   </button>
                 </div>
               </div>
@@ -487,7 +499,7 @@ export default function BuyerLogin() {
                 value={email}
                 onChange={e => {
                   setEmail(e.target.value);
-                  console.debug("Email changed:", e.target.value.substring(0, 3) + "...");
+                  console.debug("Email updated:", e.target.value.substring(0, 3) + "...");
                 }}
                 required
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -502,7 +514,7 @@ export default function BuyerLogin() {
                 value={password}
                 onChange={e => {
                   setPassword(e.target.value);
-                  console.debug("Password changed, length:", e.target.value.length);
+                  console.debug("Password updated, length:", e.target.value.length);
                 }}
                 required
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -552,8 +564,8 @@ export default function BuyerLogin() {
 
         {/* Debug Info */}
         <div className="mt-8 text-center text-xs text-gray-500">
-          <p>Tap the 🐛 button (bottom-right) to see cookie debug logs</p>
-          <p className="mt-1">Current domain: {window.location.hostname}</p>
+          <p>Tap the 🐛 button (bottom-right) to see detailed debug logs</p>
+          <p className="mt-1">All cookie and network details will be logged there</p>
         </div>
       </div>
 

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useBuyerAuth } from "../context/BuyerAuthContext.jsx";
 import DOMPurify from "dompurify";
-import { ArrowLeft, HelpCircle, Bug, X, Trash2, RefreshCw, Wifi, AlertCircle, Terminal, Shield, Cookie, Key } from "lucide-react";
+import { ArrowLeft, HelpCircle, Bug, X, Trash2, Shield, AlertCircle, Terminal, Cookie, Key, Lock } from "lucide-react";
 
 // ============================================
 // MOBILE DEBUG HOOK
@@ -124,7 +124,7 @@ const useMobileDebug = () => {
 };
 
 // ============================================
-// BUYER LOGIN COMPONENT - FINAL VERSION
+// BUYER LOGIN COMPONENT WITH CSRF PROTECTION
 // ============================================
 export default function BuyerLogin() {
   const { login } = useBuyerAuth();
@@ -133,57 +133,117 @@ export default function BuyerLogin() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [cookieStatus, setCookieStatus] = useState("unknown");
+  const [csrfToken, setCsrfToken] = useState("");
+  const [csrfReady, setCsrfReady] = useState(false);
+  const [securityStatus, setSecurityStatus] = useState({
+    cookies: "checking",
+    https: "checking",
+    csrf: "checking"
+  });
 
   const { DebugPanel } = useMobileDebug();
 
-  // Test cookie functionality on mount
+  // Initialize security checks and fetch CSRF token
   useEffect(() => {
-    const testCookieSupport = () => {
-      console.log("🔍 Testing browser cookie support...");
+    const initializeSecurity = async () => {
+      console.log("🔐 Initializing security checks...");
       
-      // Check if cookies are enabled
+      // Check HTTPS
+      const isHTTPS = window.location.protocol === "https:";
+      setSecurityStatus(prev => ({ ...prev, https: isHTTPS ? "secure" : "insecure" }));
+      console.log("🔐 HTTPS:", isHTTPS ? "✅ Secure" : "❌ Insecure");
+      
+      // Check cookies
       const cookiesEnabled = navigator.cookieEnabled;
-      console.log("🍪 navigator.cookieEnabled:", cookiesEnabled);
+      setSecurityStatus(prev => ({ ...prev, cookies: cookiesEnabled ? "enabled" : "disabled" }));
+      console.log("🍪 Cookies:", cookiesEnabled ? "✅ Enabled" : "❌ Disabled");
       
-      // Try to set and read a test cookie
-      document.cookie = "shopplus_test=working; path=/; max-age=60; SameSite=None; Secure";
-      
-      setTimeout(() => {
-        const canReadCookie = document.cookie.includes("shopplus_test");
-        console.log("✅ Can read test cookie?", canReadCookie);
-        console.log("📝 All cookies:", document.cookie);
-        
-        setCookieStatus(canReadCookie ? "enabled" : "disabled");
-        
-        if (!canReadCookie) {
-          console.warn("⚠️ Cookie support may be disabled in browser settings");
-        }
-      }, 100);
+      // Fetch CSRF token
+      await fetchCSRFToken();
     };
     
-    testCookieSupport();
+    initializeSecurity();
   }, []);
 
-  // Enhanced login handler with detailed cookie tracking
+  // Fetch CSRF token from backend
+  const fetchCSRFToken = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
+      console.log("🛡️ Fetching CSRF token from:", `${API_BASE}/api/csrf-token`);
+      
+      const response = await fetch(`${API_BASE}/api/csrf-token`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ CSRF token received");
+        setCsrfToken(data.csrfToken);
+        setCsrfReady(true);
+        setSecurityStatus(prev => ({ ...prev, csrf: "ready" }));
+        
+        // Store for later use
+        localStorage.setItem('csrfToken', data.csrfToken);
+        
+        // Check if cookie was actually set
+        setTimeout(() => {
+          const hasCsrfCookie = document.cookie.includes('X-CSRF-TOKEN');
+          console.log("🍪 CSRF cookie present?", hasCsrfCookie);
+        }, 100);
+      } else {
+        console.warn("⚠️ CSRF endpoint returned error:", response.status);
+        setSecurityStatus(prev => ({ ...prev, csrf: "error" }));
+        
+        // Try backup endpoint
+        await fetchBackupCSRFToken();
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch CSRF token:", error.message);
+      setSecurityStatus(prev => ({ ...prev, csrf: "error" }));
+    }
+  };
+
+  // Backup CSRF token endpoint
+  const fetchBackupCSRFToken = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
+      console.log("🛡️ Trying backup CSRF endpoint...");
+      
+      const response = await fetch(`${API_BASE}/api/auth/buyer/csrf-token`, {
+        method: "GET",
+        credentials: "include"
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCsrfToken(data.csrfToken);
+        setCsrfReady(true);
+        setSecurityStatus(prev => ({ ...prev, csrf: "ready" }));
+        console.log("✅ Backup CSRF token received");
+      }
+    } catch (error) {
+      console.warn("⚠️ Backup CSRF also failed");
+    }
+  };
+
+  // Main login handler with CSRF protection
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     
-    console.log("=".repeat(50));
-    console.log("🔐 LOGIN ATTEMPT STARTED");
-    console.log("=".repeat(50));
+    console.log("=".repeat(60));
+    console.log("🔐 SECURE LOGIN ATTEMPT WITH CSRF PROTECTION");
+    console.log("=".repeat(60));
     
-    console.log("📝 Initial state:", {
-      email: email.substring(0, 3) + "...",
-      passwordLength: password.length,
-      loading,
-      cookieStatus,
-      frontendDomain: window.location.hostname,
-      isHTTPS: window.location.protocol === "https:",
-      cookiesBefore: document.cookie
-    });
-
+    console.log("📊 Security Status:", securityStatus);
+    console.log("🔑 CSRF Token:", csrfToken ? "Present" : "Missing");
+    console.log("📧 Email:", email.substring(0, 3) + "...");
+    
+    // Validate inputs
     const cleanEmail = DOMPurify.sanitize(email.trim());
     const cleanPassword = DOMPurify.sanitize(password);
 
@@ -204,225 +264,134 @@ export default function BuyerLogin() {
       const startTime = Date.now();
       const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
       
-      console.log("📤 Calling context login function...");
-      console.log("🔧 Expected cookie behavior:");
-      console.log("   - withCredentials: true");
-      console.log("   - SameSite: none");
-      console.log("   - Secure: true (HTTPS)");
-      console.log("   - Domain: .onrender.com");
-      console.log("🌐 Backend URL:", API_BASE);
+      // Prepare CSRF token for request
+      const tokenToUse = csrfToken || localStorage.getItem('csrfToken') || '';
+      console.log("🛡️ Using CSRF token:", tokenToUse ? "Yes" : "No");
       
-      // Intercept fetch to see actual request
-      const originalFetch = window.fetch;
-      let interceptedRequest = null;
-      
-      window.fetch = function(url, options = {}) {
-        if (url && url.includes('/auth/buyer/login')) {
-          interceptedRequest = {
-            url,
-            method: options.method,
-            credentials: options.credentials,
-            headers: options.headers,
-            mode: options.mode,
-            body: options.body ? JSON.parse(options.body) : null
-          };
-          console.log("🌐 [INTERCEPTED] Login request:", interceptedRequest);
-        }
-        return originalFetch(url, options);
-      };
-      
-      // Call the login function
-      const userData = await login(cleanEmail, cleanPassword);
-      
-      // Restore original fetch
-      window.fetch = originalFetch;
+      // Make login request WITH CSRF protection
+      const response = await fetch(`${API_BASE}/api/auth/buyer/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-CSRF-Token": tokenToUse // ⭐ CRITICAL: CSRF token in header
+        },
+        credentials: "include", // ⭐ CRITICAL: For HTTP-only cookies
+        mode: "cors",
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: cleanPassword
+        })
+      });
       
       const duration = Date.now() - startTime;
+      console.log(`⏱️ Request completed in ${duration}ms`);
+      console.log("📡 Response Status:", response.status, response.statusText);
       
-      console.log(`⏱️ Login completed in ${duration}ms`);
-      console.log("📦 Login response data:", userData);
+      const data = await response.json();
+      console.log("📦 Response Data:", data);
       
-      // Check cookies after login
-      setTimeout(() => {
-        console.log("🍪 Cookies after login response:", document.cookie);
-        
-        const hasAccessToken = document.cookie.includes('accessToken');
-        const hasRefreshToken = document.cookie.includes('refreshToken');
-        
-        console.log("✅ Cookie presence check:", {
-          accessToken: hasAccessToken ? 'PRESENT 🎉' : 'MISSING ❌',
-          refreshToken: hasRefreshToken ? 'PRESENT 🎉' : 'MISSING ❌'
-        });
-        
-        if (!hasAccessToken) {
-          console.warn("⚠️ accessToken cookie not found!");
-          console.warn("Possible issues:");
-          console.warn("1. Backend not setting cookie correctly");
-          console.warn("2. Cookie blocked by browser (check SameSite)");
-          console.warn("3. Domain mismatch (frontend vs backend)");
+      // Handle response
+      if (!response.ok) {
+        // Check if it's a CSRF error
+        if (response.status === 403 && data.error?.includes("CSRF") || data.error?.includes("security token")) {
+          console.error("❌ CSRF ERROR: Token invalid or missing");
+          setErrorMsg("Security token expired. Please refresh the page and try again.");
+          
+          // Refresh CSRF token
+          await fetchCSRFToken();
+        } else {
+          throw new Error(data.error || data.message || "Login failed");
         }
-      }, 300);
-      
-      if (userData) {
-        console.log("🎉 Login successful! User data:", {
-          id: userData.id,
-          email: userData.email,
-          name: userData.full_name
-        });
+      } else {
+        console.log("✅ LOGIN SUCCESSFUL with CSRF protection");
+        console.log("👤 User:", data.user ? "Received" : "Not in response");
         
-        // Wait a moment for cookies to be processed
+        // Check for cookies after successful login
+        setTimeout(() => {
+          console.log("🍪 Cookies after login:", document.cookie);
+          const hasAuthCookies = document.cookie.includes('accessToken') || document.cookie.includes('refreshToken');
+          console.log("🔐 Auth cookies present?", hasAuthCookies);
+        }, 300);
+        
+        // Redirect to homepage
         setTimeout(() => {
           console.log("🔄 Redirecting to homepage...");
           navigate("/");
         }, 500);
-      } else {
-        throw new Error("Login returned no user data");
       }
-
+      
     } catch (err) {
-      console.error("❌ LOGIN ERROR DETAILS:", {
+      console.error("❌ LOGIN ERROR:", {
         message: err.message,
         name: err.name,
-        responseStatus: err.response?.status,
-        responseData: err.response?.data,
-        stack: err.stack?.split('\n')[0]
+        timestamp: new Date().toISOString()
       });
       
       let errorMessage = "Login failed. Please try again.";
       
       if (err.message.includes("Network Error") || err.message.includes("Failed to fetch")) {
-        errorMessage = "Cannot connect to server. Check your internet connection.";
-      } else if (err.message.includes("credentials") || err.message.includes("cookie")) {
-        errorMessage = "Authentication failed. Try clearing browser cookies.";
-      } else if (err.response?.status === 401) {
+        errorMessage = "Cannot connect to server. Please check your internet connection.";
+      } else if (err.message.includes("credentials") || err.message.includes("Invalid email")) {
         errorMessage = "Invalid email or password.";
-      } else if (err.response?.status === 403) {
-        errorMessage = "Account not authorized as buyer.";
       }
       
       setErrorMsg(errorMessage);
       
-      // Run diagnostic tests
-      setTimeout(() => {
-        runLoginDiagnostics(cleanEmail, cleanPassword);
-      }, 1000);
     } finally {
       setLoading(false);
-      console.log("=".repeat(50));
+      console.log("=".repeat(60));
       console.log("🏁 LOGIN PROCESS COMPLETED");
-      console.log("=".repeat(50));
+      console.log("=".repeat(60));
     }
   };
 
-  // Diagnostic function to identify exact issue
-  const runLoginDiagnostics = async (testEmail, testPassword) => {
+  // Test security features
+  const testSecurityFeatures = async () => {
+    console.log("🧪 Testing security features...");
+    
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
     
-    console.log("🔧 RUNNING LOGIN DIAGNOSTICS");
-    
     try {
-      // Test 1: Check if backend is reachable
-      console.log("1️⃣ Testing backend connectivity...");
-      const healthCheck = await fetch(API_BASE, {
-        method: "GET",
-        mode: "cors"
-      }).catch(err => {
-        console.error("   ❌ Backend unreachable:", err.message);
-        return null;
+      // Test 1: CSRF token endpoint
+      console.log("1️⃣ Testing CSRF token endpoint...");
+      const csrfRes = await fetch(`${API_BASE}/api/csrf-token`, {
+        credentials: 'include'
       });
+      console.log("   CSRF Endpoint:", csrfRes.status, csrfRes.ok ? "✅ OK" : "❌ Failed");
       
-      if (healthCheck) {
-        console.log(`   ✅ Backend reachable (${healthCheck.status})`);
-      }
+      // Test 2: Check cookies
+      console.log("2️⃣ Testing cookie support...");
+      document.cookie = "security_test=working; path=/; max-age=60; SameSite=None; Secure";
+      setTimeout(() => {
+        console.log("   Cookie test:", document.cookie.includes('security_test') ? "✅ Works" : "❌ Failed");
+      }, 100);
       
-      // Test 2: Check CORS configuration
-      console.log("2️⃣ Testing CORS configuration...");
-      const corsTest = await fetch(`${API_BASE}/api/auth/buyer/login`, {
-        method: "OPTIONS",
-        credentials: "include",
-        mode: "cors"
-      }).catch(err => {
-        console.error("   ❌ CORS preflight failed:", err.message);
-        return null;
-      });
-      
-      if (corsTest) {
-        console.log("   ✅ CORS preflight successful");
-        console.log("   📋 CORS Headers:", {
-          allowOrigin: corsTest.headers.get('access-control-allow-origin'),
-          allowCredentials: corsTest.headers.get('access-control-allow-credentials')
-        });
-      }
-      
-      // Test 3: Direct login attempt with full logging
-      console.log("3️⃣ Testing direct login...");
-      const loginResponse = await fetch(`${API_BASE}/api/auth/buyer/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        credentials: "include",
-        mode: "cors",
-        body: JSON.stringify({
-          email: testEmail,
-          password: testPassword
-        })
-      });
-      
-      console.log("   📡 Direct login response:", {
-        status: loginResponse.status,
-        statusText: loginResponse.statusText,
-        ok: loginResponse.ok,
-        headers: {
-          'set-cookie': loginResponse.headers.get('set-cookie'),
-          'content-type': loginResponse.headers.get('content-type')
-        }
-      });
-      
-      const responseData = await loginResponse.json().catch(() => ({}));
-      console.log("   📦 Response data:", responseData);
+      // Test 3: Backend connectivity
+      console.log("3️⃣ Testing backend connectivity...");
+      const healthRes = await fetch(API_BASE);
+      console.log("   Backend:", healthRes.status, healthRes.ok ? "✅ Reachable" : "❌ Unreachable");
       
     } catch (error) {
-      console.error("❌ Diagnostic failed:", error);
+      console.error("❌ Security test failed:", error);
     }
   };
 
-  // Quick cookie test
-  const testCookieFlow = async () => {
-    const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
-    
-    console.log("🧪 Testing cookie flow with backend...");
-    
-    try {
-      // Clear existing cookies
-      document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      
-      // Set a test cookie from frontend
-      document.cookie = "frontend_test_cookie=hello; path=/; max-age=60; SameSite=None; Secure";
-      
-      // Test if backend receives cookies
-      const response = await fetch(`${API_BASE}/api/debug/cookies`, {
-        method: "GET",
-        credentials: "include",
-        mode: "cors"
-      });
-      
-      const data = await response.json();
-      console.log("📡 Backend cookie debug:", data);
-      
-    } catch (error) {
-      console.error("❌ Cookie test failed:", error);
-    }
-  };
-
+  // Handle social login
   const handleSocialLogin = (provider) => {
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
     const url = `${API_BASE}/api/auth/buyer/${provider}`;
     
     console.log(`🔗 ${provider} login redirect:`, { url });
     window.location.href = url;
+  };
+
+  // Refresh CSRF token manually
+  const refreshCSRFToken = async () => {
+    console.log("🔄 Manually refreshing CSRF token...");
+    setCsrfReady(false);
+    setSecurityStatus(prev => ({ ...prev, csrf: "refreshing" }));
+    await fetchCSRFToken();
   };
 
   return (
@@ -433,23 +402,33 @@ export default function BuyerLogin() {
             <ArrowLeft size={18} /> Back
           </button>
           
-          <div className="flex items-center gap-4">
-            {/* Cookie Status Indicator */}
-            <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-              cookieStatus === "enabled" ? "bg-green-100 text-green-700" :
-              cookieStatus === "disabled" ? "bg-red-100 text-red-700" :
+          <div className="flex items-center gap-3">
+            {/* Security Status Indicators */}
+            <div className={`px-2 py-1 rounded text-xs font-medium ${
+              securityStatus.https === "secure" ? "bg-green-100 text-green-700" :
+              securityStatus.https === "insecure" ? "bg-red-100 text-red-700" :
               "bg-gray-100 text-gray-700"
             }`}>
-              <Cookie size={12} className="inline mr-1" />
-              Cookies: {cookieStatus}
+              <Lock size={12} className="inline mr-1" />
+              HTTPS: {securityStatus.https}
+            </div>
+            
+            <div className={`px-2 py-1 rounded text-xs font-medium ${
+              securityStatus.csrf === "ready" ? "bg-green-100 text-green-700" :
+              securityStatus.csrf === "error" ? "bg-red-100 text-red-700" :
+              "bg-yellow-100 text-yellow-700"
+            }`}>
+              <Shield size={12} className="inline mr-1" />
+              CSRF: {securityStatus.csrf}
             </div>
             
             <button
-              onClick={testCookieFlow}
+              onClick={refreshCSRFToken}
               className="flex items-center gap-1 text-gray-700 hover:text-indigo-600 text-sm"
-              title="Test Cookie Flow"
+              title="Refresh Security Token"
+              disabled={loading}
             >
-              <Key size={16} /> Test Cookies
+              <Key size={16} /> Refresh
             </button>
             
             <Link to="/help-center" className="flex items-center gap-1 text-gray-700 hover:text-indigo-600">
@@ -459,85 +438,112 @@ export default function BuyerLogin() {
         </header>
 
         <div className="max-w-md w-full mx-auto bg-white p-6 rounded shadow">
-          <h2 className="text-2xl font-bold mb-4 text-indigo-600 text-center">Buyer Login</h2>
+          <h2 className="text-2xl font-bold mb-4 text-indigo-600 text-center">Secure Buyer Login</h2>
           
-          {/* Cookie Info Banner */}
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+          {/* Security Info Banner */}
+          <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded">
             <div className="flex items-start gap-2">
-              <Shield size={16} className="text-blue-500 mt-0.5" />
-              <div>
-                <p className="font-medium text-blue-700">HTTP-only Cookies Enabled</p>
-                <p className="text-blue-600 text-xs mt-1">
-                  Using secure, cross-domain cookies with SameSite=None
-                </p>
+              <Shield size={18} className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-blue-700">Enterprise-Grade Security</p>
+                <div className="mt-1 space-y-1">
+                  <div className="flex items-center text-xs">
+                    <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                    <span className="text-blue-600">HTTPS Encrypted Connection</span>
+                  </div>
+                  <div className="flex items-center text-xs">
+                    <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                    <span className="text-blue-600">HTTP-Only Cookies (XSS Protected)</span>
+                  </div>
+                  <div className="flex items-center text-xs">
+                    <span className={`w-2 h-2 rounded-full mr-2 ${
+                      securityStatus.csrf === "ready" ? "bg-green-500" : "bg-yellow-500"
+                    }`}></span>
+                    <span className="text-blue-600">CSRF Protection {csrfReady ? "Active" : "Loading..."}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           
+          {/* Error Display */}
           {errorMsg && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
               <div className="flex items-start gap-2">
                 <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-red-700 font-medium">{errorMsg}</p>
-                  <button
-                    onClick={() => console.error("Error logged to console")}
-                    className="text-xs text-red-600 hover:underline mt-1"
-                  >
-                    View error details in console
-                  </button>
+                  {errorMsg.includes("Security token") && (
+                    <button
+                      onClick={refreshCSRFToken}
+                      className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded mt-1 hover:bg-red-200"
+                    >
+                      Refresh Security Token
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
               <input
                 type="email"
-                placeholder="Email"
+                placeholder="you@example.com"
                 value={email}
                 onChange={e => {
                   setEmail(e.target.value);
                   console.debug("Email updated:", e.target.value.substring(0, 3) + "...");
                 }}
                 required
-                className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                disabled={loading}
+                className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                disabled={loading || !csrfReady}
+                autoComplete="email"
               />
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="••••••••"
                 value={password}
                 onChange={e => {
                   setPassword(e.target.value);
                   console.debug("Password updated, length:", e.target.value.length);
                 }}
                 required
-                className="w-full border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                disabled={loading}
+                className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                disabled={loading || !csrfReady}
+                autoComplete="current-password"
               />
             </div>
             
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-500 text-white py-2 rounded hover:bg-indigo-600 disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={loading || !csrfReady}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-2.5 rounded font-medium hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Logging in...
+                  Securely Logging In...
+                </>
+              ) : !csrfReady ? (
+                <>
+                  <div className="animate-pulse">🛡️</div>
+                  Loading Security...
                 </>
               ) : (
-                'Login'
+                'Secure Login'
               )}
             </button>
           </form>
 
+          {/* Social Login Section */}
           <div className="mt-6 pt-6 border-t">
             <p className="text-center text-gray-600 mb-4">Or continue with</p>
             <div className="grid grid-cols-3 gap-3">
@@ -545,7 +551,7 @@ export default function BuyerLogin() {
                 <button
                   key={provider}
                   onClick={() => handleSocialLogin(provider)}
-                  className="border px-3 py-2 rounded hover:bg-gray-50 text-sm capitalize"
+                  className="border border-gray-300 px-3 py-2 rounded hover:bg-gray-50 text-sm capitalize transition-colors"
                   disabled={loading}
                 >
                   {provider}
@@ -554,18 +560,40 @@ export default function BuyerLogin() {
             </div>
           </div>
 
+          {/* Signup Link */}
           <p className="mt-6 text-center text-sm text-gray-600">
             Don't have an account?{" "}
             <Link to="/signup" className="text-indigo-600 font-medium hover:underline">
-              Sign up
+              Create secure account
             </Link>
           </p>
         </div>
 
-        {/* Debug Info */}
-        <div className="mt-8 text-center text-xs text-gray-500">
-          <p>Tap the 🐛 button (bottom-right) to see detailed debug logs</p>
-          <p className="mt-1">All cookie and network details will be logged there</p>
+        {/* Security Footer */}
+        <div className="mt-8 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+            <div className="text-xs text-gray-600">
+              <span className="font-medium">Security Status:</span>{" "}
+              <span className={
+                securityStatus.https === "secure" && securityStatus.csrf === "ready" 
+                  ? "text-green-600" 
+                  : "text-yellow-600"
+              }>
+                {securityStatus.https === "secure" && securityStatus.csrf === "ready" 
+                  ? "🛡️ Fully Secured" 
+                  : "⚠️ Securing..."}
+              </span>
+            </div>
+            <button
+              onClick={testSecurityFeatures}
+              className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded transition-colors"
+            >
+              Test Security
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            Tap 🐛 button for detailed security logs
+          </p>
         </div>
       </div>
 
